@@ -873,7 +873,7 @@ $("wxLoad").onclick = async () => {
     const T = avg("temperature_2m"), w = avg("wind_speed_10m"), pr = idx.reduce((x, i) => x + (h.precipitation[i] || 0), 0), fz = avg("freezing_level_height"), sd = Math.max(...idx.map(i => h.snow_depth[i] || 0));
     $("T").value = T.toFixed(1); $("Tz").value = Math.round(j.elevation); $("wind").value = Math.round(w);
     if (pr > 1.5) $("surface").value = "wet";
-    if (sd >= 0.01) { $("snowLine").value = Math.round(j.elevation / 50) * 50; $("snowSurf").value = sd > 0.3 ? "snow3" : sd > 0.1 ? "snow2" : "snow1"; }
+    if (sd >= 0.03) { $("snowLine").value = Math.round(j.elevation / 50) * 50; $("snowSurf").value = sd > 0.3 ? "snow3" : sd > 0.1 ? "snow2" : "snow1"; }
     st.innerHTML = `Open-Meteo, ${esc(date)}, ${startH}–${Math.min(23, startH + durH)} Uhr: Ø ${nf(T, 1)} °C auf ${Math.round(j.elevation)} m, Wind ${nf(w)} km/h, Niederschlag ${nf(pr, 1)} mm, Nullgradgrenze ~${nf(fz)} m, Schneehöhe am Rasterpunkt ${nf(sd * 100)} cm. Liegenden Schnee weiter oben sieht die Vorhersage nicht zuverlässig, Schneegrenze bitte prüfen (z. B. Lawinenwarndienst, Webcams).`;
     render();
   } catch (e) { st.textContent = "Die Vorhersage konnte ich nicht laden: " + (e.message || "Netzwerkfehler") + " Trag die Werte bitte von Hand ein."; }
