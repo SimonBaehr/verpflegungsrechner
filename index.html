@@ -1,0 +1,1086 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Verpflegungsrechner für Trailläufe: Pace über Höhenmeter, Carbs, Flüssigkeit und Natrium pro Abschnitt.">
+<title>Verpflegungsrechner Trail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Wegweiser-Optik. Links Eingaben in aufklappbaren Tafeln, rechts Ergebnis mit Höhenprofil, Plan, Packliste. */
+:root{
+  --bg:#f3f5f2; --panel:#ffffff; --ink:#1c2621; --muted:#5d6b63; --line:#d9dfda; --soft:#e8ece8;
+  --accent:#c4361f; --accent-ink:#ffffff; --carb:#c98a14; --fluid:#2f72a8; --salt:#7b5ea7; --ok:#2e7d4f; --warn:#b5651d;
+  --terrain:#a9b8ad; --terrain-line:#4f6357; --snow:#7fa7c9;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif; --f-body:Inter,system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121815; --panel:#1a221e; --ink:#e6ece8; --muted:#9aa9a0; --line:#2c3732; --soft:#222c27;
+  --accent:#e2573c; --accent-ink:#ffffff; --carb:#e0a93a; --fluid:#5ea0d6; --salt:#a88bd4; --ok:#5fb884; --warn:#e09146;
+  --terrain:#3b4b42; --terrain-line:#8fa597; --snow:#8fb6d9; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121815; --panel:#1a221e; --ink:#e6ece8; --muted:#9aa9a0; --line:#2c3732; --soft:#222c27;
+  --accent:#e2573c; --accent-ink:#ffffff; --carb:#e0a93a; --fluid:#5ea0d6; --salt:#a88bd4; --ok:#5fb884; --warn:#e09146;
+  --terrain:#3b4b42; --terrain-line:#8fa597; --snow:#8fb6d9; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:18px}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:34px;line-height:1;margin:0;letter-spacing:.01em;text-transform:uppercase}
+.brand h1 span{color:var(--accent)}
+.brand p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{font:600 15px/1 var(--f-display);letter-spacing:.04em;text-transform:uppercase;border:0;background:transparent;color:var(--muted);padding:9px 14px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.seg button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.grid{display:grid;grid-template-columns:minmax(300px,390px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.inputs{display:flex;flex-direction:column;gap:10px;min-width:0}
+details.card{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+details.card>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:10px;font:600 17px/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.04em}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary .tag{margin-left:auto;font:500 12px var(--f-body);text-transform:none;letter-spacing:0;color:var(--muted);text-align:right}
+details.card>summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;flex:none}
+details.card[open]>summary::before{transform:rotate(45deg)}
+.body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px}
+.row.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+label.f input,label.f select{font:500 14px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 8px;width:100%;min-width:0}
+label.chk{display:flex;gap:8px;align-items:center;font-size:13px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.hint.est::before{content:"Schätzung · ";font-weight:600;color:var(--warn)}
+.btn{font:600 13px var(--f-body);border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:7px;padding:7px 10px;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{padding:4px 8px;font-size:12px}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.drop{border:1.5px dashed var(--line);border-radius:9px;padding:12px;text-align:center;color:var(--muted);font-size:13px}
+.drop.over{border-color:var(--accent);color:var(--ink)}
+.tbl-wrap{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 6px;border-bottom:1px solid var(--soft);vertical-align:top}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mini input,.mini select{font:500 13px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 5px;width:100%;min-width:44px}
+.mini td{padding:3px 3px}
+.out{display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.panel h2{font:700 20px/1.1 var(--f-display);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.panel h2 small{font:500 12px var(--f-body);text-transform:none;letter-spacing:0;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:480px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--panel);padding:11px 12px;min-width:0}
+.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi .v{font:600 26px/1.05 var(--f-display);margin-top:3px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--muted);margin-top:2px}
+.kpi.c .v{color:var(--carb)} .kpi.w .v{color:var(--fluid)} .kpi.n .v{color:var(--salt)} .kpi.h .v{color:var(--accent)}
+svg text{fill:var(--muted);font:11px var(--f-body)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--soft);white-space:nowrap;margin:1px 2px 1px 0}
+.chip i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.chip.gel i{background:var(--carb)} .chip.bar i{background:#8a5a2b} .chip.chew i{background:#d26a8f} .chip.can i{background:var(--fluid)} .chip.drink i{background:var(--fluid)} .chip.vp{background:var(--accent);color:var(--accent-ink)}
+tr.vp td{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.tabs{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
+.tabs button{font:600 14px var(--f-display);letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--line);background:var(--bg);color:var(--muted);border-radius:7px;padding:6px 10px;cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--ink)}
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:700px){.cols{grid-template-columns:minmax(0,1fr)}}
+ul.plain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+ul.plain li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--soft);padding-bottom:6px}
+ul.plain li b{font-family:var(--f-mono);font-weight:500}
+.note{font-size:12.5px;color:var(--muted)}
+.warnbox{border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);padding:8px 10px;border-radius:0 7px 7px 0;font-size:13px}
+.okbox{border-left:3px solid var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent);padding:8px 10px;border-radius:0 7px 7px 0;font-size:13px}
+.src{font-size:12px;color:var(--muted);columns:2;column-gap:24px}
+@media (max-width:700px){.src{columns:1}}
+.src p{margin:0 0 6px;break-inside:avoid}
+.badge{font:600 10px var(--f-body);text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:4px;background:var(--soft);color:var(--muted)}
+.badge.ok{color:var(--ok)} .badge.est{color:var(--warn)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header class="top">
+  <div class="brand">
+    <h1>Verpflegungs<span>rechner</span> Trail</h1>
+    <p>Pace über Höhenmeter nach Minetti, kalibriert auf deine Strava-Rennen. Carbs, Flüssigkeit und Natrium pro Abschnitt.</p>
+  </div>
+  <div class="seg" role="group" aria-label="Lauftyp">
+    <button type="button" data-type="race" aria-pressed="true">Rennen</button>
+    <button type="button" data-type="fast" aria-pressed="false">Schneller Lauf</button>
+    <button type="button" data-type="slow" aria-pressed="false">Langsamer Lauf</button>
+  </div>
+</header>
+
+<div class="grid">
+<section class="inputs" aria-label="Eingaben">
+
+  <details class="card" open id="c-course">
+    <summary>Strecke <span class="tag" id="courseTag"></span></summary>
+    <div class="body">
+      <div class="drop" id="drop">GPX-Datei hierher ziehen oder <label style="color:var(--accent);cursor:pointer;text-decoration:underline">auswählen<input type="file" id="gpx" accept=".gpx,application/gpx+xml" hidden></label><br><span class="hint">Wegpunkte in der GPX werden als Verpflegungsstellen vorgeschlagen.</span></div>
+      <div class="btns">
+        <button class="btn" type="button" id="loadSample">Beispiel laden: Mittenwald Trail</button>
+        <button class="btn" type="button" id="toManual">Manuell eingeben</button>
+      </div>
+      <div id="manualBox" hidden>
+        <p class="hint">Je Abschnitt Länge und Höhenmeter. Ein Haken bei VP setzt eine Verpflegungsstelle ans Abschnittsende.</p>
+        <div class="tbl-wrap"><table class="mini" id="manTbl"><thead><tr><th>km</th><th>Hm ↑</th><th>Hm ↓</th><th>VP</th><th></th></tr></thead><tbody></tbody></table></div>
+        <div class="btns"><button class="btn small" type="button" id="manAdd">Abschnitt hinzufügen</button><button class="btn small primary" type="button" id="manApply">Strecke übernehmen</button></div>
+        <label class="f">Start-Höhe (m)<input type="number" id="manZ0" value="800" step="10"></label>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><b style="font-size:13px">Verpflegungsstellen</b><button class="btn small" type="button" id="vpAdd">VP hinzufügen</button></div>
+        <div class="tbl-wrap"><table class="mini" id="vpTbl"><thead><tr><th>Name</th><th>km</th><th></th></tr></thead><tbody></tbody></table></div>
+        <p class="hint" id="vpHint"></p>
+      </div>
+      <div class="row">
+        <label class="f">Breitengrad<input type="number" id="lat" step="0.001"></label>
+        <label class="f">Längengrad<input type="number" id="lon" step="0.001"></label>
+      </div>
+    </div>
+  </details>
+
+  <details class="card" open id="c-run">
+    <summary>Lauf &amp; Intensität <span class="tag" id="runTag"></span></summary>
+    <div class="body">
+      <div class="row">
+        <label class="f">Datum<input type="date" id="date"></label>
+        <label class="f">Startzeit<input type="time" id="start" value="07:00"></label>
+      </div>
+      <div class="row">
+        <label class="f">Zielzeit (h:mm, leer = Modell)<input type="text" id="target" placeholder="z. B. 5:15" inputmode="numeric"></label>
+        <label class="f">Technik der Strecke<select id="tech">
+          <option value="0.95">Forstweg, flowig</option>
+          <option value="1" selected>Trail wie deine Rennen</option>
+          <option value="1.08">technisch, wurzelig</option>
+          <option value="1.18">alpin, verblockt</option></select></label>
+      </div>
+      <p class="hint">Die drei Felder unten hängen zusammen. Was du zuletzt einträgst, bestimmt die anderen. Leer lassen heißt: Vorgabe des Lauftyps.</p>
+      <div class="row three">
+        <label class="f">Ziel-HF (bpm)<input type="number" id="hr" min="100" max="210" placeholder="auto"></label>
+        <label class="f">RPE (1–10)<input type="number" id="rpe" min="1" max="10" step="0.5" placeholder="auto"></label>
+        <label class="f">% Rennpace<input type="number" id="pct" min="40" max="115" step="1" placeholder="auto"></label>
+      </div>
+      <div class="btns"><button class="btn small" type="button" id="resetInt">Auf Lauftyp zurücksetzen</button></div>
+      <label class="f">Gehen ab Steigung (%)<input type="number" id="walkG" value="15" min="5" max="40"></label>
+    </div>
+  </details>
+
+  <details class="card" id="c-env">
+    <summary>Wetter &amp; Untergrund <span class="tag" id="envTag"></span></summary>
+    <div class="body">
+      <div class="btns"><button class="btn primary" type="button" id="wxLoad">Vorhersage laden</button></div>
+      <p class="hint" id="wxStatus">Lädt die Open-Meteo-Vorhersage (kostenlos, ohne Konto) für Startpunkt, Datum und Laufzeit. Werte kannst du danach von Hand ändern.</p>
+      <div class="row">
+        <label class="f">Temperatur (°C)<input type="number" id="T" value="10" step="0.5"></label>
+        <label class="f">gemessen auf Höhe (m)<input type="number" id="Tz" value="1000" step="10"></label>
+      </div>
+      <div class="row">
+        <label class="f">Wind (km/h)<input type="number" id="wind" value="5" min="0"></label>
+        <label class="f">Untergrund<select id="surface"></select></label>
+      </div>
+      <div class="row">
+        <label class="f">Schneegrenze (m, leer = kein Schnee)<input type="number" id="snowLine" step="50" placeholder="kein Schnee"></label>
+        <label class="f">Oberhalb Schneegrenze<select id="snowSurf"></select></label>
+      </div>
+      <p class="hint est">Untergrund-Faktoren sind Erfahrungswerte, keine Studienwerte. Dein Spitzingsee-Lauf vom 15.11. war bei gleicher HF rund 60 % langsamer als Breitenstein, das passt grob zu „Schnee 10–30 cm“ plus Technik.</p>
+    </div>
+  </details>
+
+  <details class="card" id="c-fuel">
+    <summary>Verpflegung &amp; Produkte <span class="tag" id="fuelTag"></span></summary>
+    <div class="body">
+      <div class="row">
+        <label class="f">Intervall (min)<input type="number" id="interval" value="25" min="10" max="60"></label>
+        <label class="f">Koffein max. (mg/kg)<input type="number" id="cafKg" value="3" min="0" max="6" step="0.5"></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="cafRaceOnly" checked> Koffein nur im Rennen</label>
+      <label class="chk"><input type="checkbox" id="useFlask" checked> Flask mit 2:1 Drink (im Rennen, an VPs nachfüllen)</label>
+      <div class="row three">
+        <label class="f">Flask (l)<input type="number" id="flaskL" value="0.5" step="0.05" min="0.15"></label>
+        <label class="f">Anzahl<input type="number" id="flasks" value="2" min="1" max="4"></label>
+        <label class="f">Portionen/Flask<input type="number" id="drinkServ" value="2" min="0.5" step="0.5"></label>
+      </div>
+      <label class="f">Anteil Carbs aus der Flask (%)<input type="number" id="drinkShare" value="40" min="0" max="100" step="5"></label>
+      <label class="chk"><input type="checkbox" id="useCan" checked> Im Training: Energydrink-Dose 0,25 l dabei</label>
+      <div class="tbl-wrap"><table class="mini" id="prodTbl"><thead><tr><th></th><th>Produkt</th><th>Art</th><th class="num">KH g</th><th class="num">Na mg</th><th class="num">Koff.</th><th class="num">Prio</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="btns"><button class="btn small" type="button" id="prodAdd">Produkt hinzufügen</button><button class="btn small" type="button" id="prodReset">4Endurance-Standard wiederherstellen</button></div>
+      <p class="hint">Werte der 4Endurance-2:1-Linie laut Hersteller (30 g KH, 100 mg Na je Gel, Drink-Portion und Bar; Jelly Bar 20 g). Bei Drink und Dose bitte die Packungsangabe prüfen.</p>
+    </div>
+  </details>
+
+  <details class="card" id="c-ath">
+    <summary>Athlet <span class="tag" id="athTag"></span></summary>
+    <div class="body">
+      <div class="row three">
+        <label class="f">Gewicht (kg)<input type="number" id="mass" value="85" step="0.5"></label>
+        <label class="f">Größe (cm)<input type="number" id="height" value="191"></label>
+        <label class="f">Geburtsdatum<input type="date" id="birth"></label>
+      </div>
+      <div class="row three">
+        <label class="f">HFmax<input type="number" id="hrMax" value="202"></label>
+        <label class="f">Schwellen-HF<input type="number" id="lthr" value="182"></label>
+        <label class="f">Schwellenpace<input type="text" id="thrPace" value="3:55"></label>
+      </div>
+      <div class="row">
+        <label class="f">Carb-Toleranz (g/h)<input type="number" id="carbTol" value="90" min="20" max="130"></label>
+        <label class="f">Schweißrate gemessen (l/h)<input type="number" id="sweatRate" step="0.05" placeholder="unbekannt"></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="salty" checked> Ich schwitze salzig</label>
+      <label class="chk"><input type="checkbox" id="gut"> Gut Training: im Training auf volle Toleranz gehen</label>
+      <p class="hint" id="athHint"></p>
+    </div>
+  </details>
+
+  <details class="card" id="c-cal">
+    <summary>Kalibrierung <span class="tag" id="calTag"></span></summary>
+    <div class="body">
+      <p class="hint">Aus jedem Lauf wird die flach-äquivalente Pace berechnet (Zeit geteilt durch Minetti-gewichtete Distanz). Aus den Rennen entsteht deine Ermüdungskurve, aus den ruhigen Läufen der Anker fürs lockere Training.</p>
+      <div class="tbl-wrap"><table class="mini" id="calTbl"><thead><tr><th>Lauf</th><th>Typ</th><th class="num">km</th><th class="num">Hm</th><th class="num">Zeit</th><th class="num">HF</th><th class="num">Flach-Pace</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div id="calFit" class="note"></div>
+      <label class="f">Bergab-Vorteil (0 = keiner, 1 = voller Minetti-Wert)<input type="range" id="down" min="0.1" max="0.9" step="0.05" value="0.45"></label>
+      <div class="btns">
+                <label class="btn">GPX-Lauf mit Zeit hinzufügen<input type="file" id="gpxRef" accept=".gpx" hidden></label>
+      </div>
+      <p class="hint" id="stravaStatus">Weitere Läufe: GPX aus Strava exportieren (Aktivität → … → GPX exportieren) und hier hinzufügen. Die Zeitstempel liefern die Laufzeit.</p>
+    </div>
+  </details>
+  <div class="btns"><button class="btn small" type="button" id="resetAll">Alle Eingaben zurücksetzen</button></div>
+</section>
+
+<section class="out" aria-label="Ergebnis">
+  <div class="kpis" id="kpis"></div>
+  <div class="panel">
+    <h2>Höhenprofil <small id="profSub"></small></h2>
+    <div class="tbl-wrap"><svg id="prof" viewBox="0 0 900 240" width="100%" role="img" aria-label="Höhenprofil mit Verpflegungspunkten"></svg></div>
+    <div class="note" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <span class="chip gel"><i></i>Gel</span><span class="chip bar"><i></i>Riegel</span><span class="chip chew"><i></i>Jelly</span><span class="chip drink"><i></i>Getränk</span><span class="chip vp">VP</span>
+    </div>
+  </div>
+  <div id="msgs" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div class="panel">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="plan" type="button">Verpflegungsplan</button>
+      <button role="tab" aria-selected="false" data-tab="splits" type="button">Splits pro km</button>
+      <button role="tab" aria-selected="false" data-tab="sections" type="button">Abschnitte</button>
+    </div>
+    <div class="tbl-wrap" id="tabPlan"></div>
+    <div class="tbl-wrap" id="tabSplits" hidden></div>
+    <div class="tbl-wrap" id="tabSections" hidden></div>
+  </div>
+  <div class="cols">
+    <div class="panel"><h2>Packliste</h2><div id="pack"></div></div>
+    <div class="panel"><h2>Bedarf &amp; Bilanz</h2><div id="bal"></div></div>
+  </div>
+  <div class="panel">
+    <h2>Modell &amp; Quellen</h2>
+    <div class="src">
+      <p><span class="badge ok">belegt</span> Pace über Steigung: Energiekosten des Laufens nach Minetti, A. E. et al. (2002), J Appl Physiol 93(3):1039–1046. Bergab wird der Minetti-Vorteil gedämpft (Regler in der Kalibrierung), weil Technik und Bremsen in der Praxis begrenzen.</p>
+      <p><span class="badge ok">belegt</span> Kohlenhydrate: 30–60 g/h bei 1–2,5 h, bis 90 g/h über 2,5 h mit Glukose-Fruktose-Mix. Thomas, Erdman &amp; Burke (2016), ACSM/AND/DC Position Statement, Med Sci Sports Exerc 48(3):543–568; Jeukendrup (2014), Sports Med 44(Suppl 1):S25–S33.</p>
+      <p><span class="badge ok">belegt</span> Flüssigkeit: Verlust über 2 % des Körpergewichts vermeiden, typisch 0,4–0,8 l/h. Sawka et al. (2007), ACSM Position Stand, Med Sci Sports Exerc 39(2):377–390.</p>
+      <p><span class="badge ok">belegt</span> Natrium im Schweiß: große Spannweite, salzige Schwitzer oft über 1.000 mg/l. Baker (2017), Sports Med 47(Suppl 1):111–128.</p>
+      <p><span class="badge ok">belegt</span> Koffein: 3–6 mg/kg leistungswirksam. Guest et al. (2021), ISSN Position Stand, J Int Soc Sports Nutr 18:1.</p>
+      <p><span class="badge ok">belegt</span> Temperatur: beste Leistungen etwa bei 5–12 °C, Verlangsamung bei Wärme. Ely et al. (2007), Med Sci Sports Exerc 39(3):487–493; El Helou et al. (2012), PLoS ONE 7(5):e37407.</p>
+      <p><span class="badge est">geschätzt</span> Ermüdungskurve (flach-äquivalente Pace = a · Dauer<sup>b</sup>, nach Riegel 1981) und Renn-HF über die Dauer: aus deinen Strava-Rennen gefittet, nur 3 Rennen, daher grob.</p>
+      <p><span class="badge est">geschätzt</span> Schweißrate ohne Messung: aus Intensität, Körperoberfläche (Du Bois) und Temperatur. Einmal vor und nach einem Lauf wiegen macht das deutlich genauer.</p>
+      <p><span class="badge est">geschätzt</span> Natriumziel: etwa die Hälfte des Schweißverlusts, 250–1.000 mg/h. Untergrund-, Wind- und Technikfaktoren sind Erfahrungswerte.</p>
+      <p><span class="badge est">geschätzt</span> Energiebedarf: Minetti-Kosten × Gewicht × Strecke, ohne Grundumsatz. Nur zur Einordnung, nicht zum Ausgleichen gedacht.</p>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<script>
+// Strava-Höhenprofile (Auflösung 300 Punkte, gleichmäßig über die Distanz), abgerufen 2026-11-20
+const REF_RAW = [
+ {id:"18996235832", name:"Mittenwald Trail 2026", date:"2026-06-20", type:"race", dist:42877, timeS:17339, hr:174,
+  alt:[919.2,919.6,920.2,920.8,921.4,920.6,922.8,925.8,929.2,942,964.4,978.6,991,1009.6,1034.8,1037.6,1030.2,1030,1025,1025.2,1019.4,1018.6,1019.2,1024.2,1055.4,1077.8,1094.8,1095,1085.6,1083.4,1080.8,1072.4,1068,1065,1063.6,1063.6,1062.2,1060,1062.4,1069.4,1067.2,1058.8,1057.8,1060.2,1056.4,1063.8,1059.6,1066.4,1079.2,1087.4,1092.6,1096,1104.4,1118.4,1116,1118.6,1109.4,1117,1120.6,1122,1125.8,1110.8,1092.8,1076.6,1063.2,1032.2,1009.4,1003.2,1005.6,1005,1000.6,1022.4,1052,1081.8,1108,1123.6,1150,1175.4,1194,1223.8,1235.4,1243.8,1241.4,1253,1258,1270.4,1283,1282.6,1282.6,1280.2,1294.6,1304,1311,1303.6,1284.4,1298,1281.6,1264.8,1242.2,1225,1230.2,1214.8,1203.8,1195.6,1198,1184,1205.6,1213,1199.2,1212.6,1224.6,1233.8,1230.6,1228.2,1208.8,1187.4,1160.4,1141,1119.4,1095,1061.2,1027.2,1000.6,976.6,961,945.6,931.8,914.4,895.6,886,852.8,863.2,904.6,939.2,974,991.2,1001.8,1015,1022.4,1010,1016.2,1039,1048,1036.4,1027,1008.8,998.8,980.8,978.8,971,960.2,957,952.8,954.8,968.4,984.8,1001.4,1007.4,1028.2,1051.4,1063.4,1075.4,1083.6,1100.8,1116.2,1128.8,1146.4,1160,1181,1209.4,1234.4,1261.8,1290.2,1320.6,1347.2,1392.2,1427,1453.8,1483.4,1509.6,1543.6,1567.4,1596,1629,1640.4,1638.4,1646.2,1663.4,1688,1690.6,1704,1709.8,1734.2,1768.4,1796,1825,1831.6,1840,1844.8,1853.8,1887,1899.4,1925,1939.6,1936.8,1961,1984.6,2005.6,2016,1986.6,1956,1922,1889.2,1857.8,1818.2,1790.6,1755.6,1724.8,1718.2,1736.4,1724.4,1698.6,1683,1669,1657.2,1656.4,1659,1653.6,1649.2,1646,1640,1625.8,1628.8,1632.8,1610.2,1592.2,1576.4,1549.2,1528.4,1510.2,1496.2,1480.2,1471.6,1448.2,1440.2,1412,1403.6,1374.2,1364,1361.8,1353,1344.4,1331.6,1316.6,1301.6,1294.2,1292,1283.4,1275.6,1268.6,1260,1238.6,1208,1190.6,1178,1160.2,1146.2,1128.4,1099.4,1074.6,1058,1010.8,986.2,961.4,931.8,908.8,878.2,854.2,835.6,805.4,794.8,774.8,763.2,748.6,738.4,733.2,727,726,718.8,714.6,715.8,714.4,711.4,707.4,705.4,712.4,707.8,706.2,702.8,697.4]},
+ {id:"18634180406", name:"Salventrail 2026", date:"2026-05-24", type:"race", dist:23071, timeS:8628, hr:184,
+  alt:[699,702.6,705.4,705.6,707,709.2,711,711.6,711.4,713.8,715,717.8,720,724,729.2,737.4,746.8,749,759.6,766.6,767.6,769.6,772.4,777.6,791.8,802.6,803.2,809.6,818.8,828,836.4,842.6,849.6,852,850,857,861.8,871.4,881,881.8,888.2,896.8,906.2,917,924.4,936.2,945.2,951.8,961,975.4,986.6,996.4,1008.4,1017.8,1027,1039.6,1058.8,1075.2,1090.2,1117,1132.2,1151.2,1171.4,1181.4,1180.2,1181,1192,1203.2,1207,1213.6,1217,1219.8,1232.6,1226,1212.8,1205.4,1196,1184.2,1199.8,1216.4,1227,1242.4,1251,1255.4,1262.6,1268.6,1275.8,1275.4,1296.6,1322.2,1330.2,1339.2,1348,1353.4,1358,1372.6,1373.8,1387.6,1403,1413.4,1422.4,1429.4,1438.4,1446,1443,1446.2,1449.8,1462,1469,1468,1475.6,1481.8,1485.2,1486.4,1489.8,1485.4,1491.6,1499,1503.2,1507,1506.8,1504.8,1497.8,1498,1493,1492,1490.8,1494.6,1492.6,1486.6,1479.8,1477.8,1477.4,1480.8,1484.4,1492.6,1503.2,1512.4,1523.4,1533.6,1544.8,1544.4,1548.4,1548.2,1567,1571,1581.4,1588.2,1598,1606.2,1626.8,1644.6,1649.8,1668,1681.4,1701,1715,1723,1758.4,1767.4,1805.2,1830.2,1835.6,1826,1814.4,1801,1790.2,1777,1762.2,1741.2,1721.6,1705.6,1687.2,1672.6,1657.4,1645.6,1621.2,1599.8,1583.6,1574,1558.2,1539,1532.2,1516.4,1503.6,1505.4,1500.4,1491,1489.4,1491,1494.8,1496,1503.8,1511.8,1516.2,1523.2,1530,1526.2,1530,1534.2,1532.8,1529.4,1514.8,1500.2,1475.4,1470.2,1463,1455.2,1446.4,1439,1429.2,1420.8,1413.2,1403.8,1392.2,1382.2,1371.6,1351.4,1334.4,1314.4,1307.4,1287,1274.4,1269.2,1258.6,1247.2,1225.2,1211.2,1201.8,1199.6,1191.8,1182.6,1173.2,1166.6,1166.2,1156,1144.8,1133.2,1123,1113.6,1106,1093,1080.2,1070.6,1060.6,1044.4,1038.4,1032,1023.6,1015.2,994.4,981.2,967.6,955.8,943.2,931.4,924.8,915,903.4,895.6,888.2,880.2,870.4,860.6,852,840.4,836.2,824.2,815.2,812.4,807.2,802.4,800,797.6,794.8,784,767.4,761.4,759.2,757,757,749.8,744.6,749.6,738.8,734.4,730.2,729.6,728.4,725,726.6,725.8,722.4,721,718,714.4,716.4,716.6,713.8,710.8]},
+ {id:"12347370488", name:"MUZ 30 (2024)", date:"2024-09-07", type:"race", dist:30030, timeS:13507, hr:176,
+  alt:[636.2,641.6,645.8,648.4,649.4,652.4,656,659,660.2,662.8,659,654.6,650.8,646.8,640.2,641.4,656.2,668.6,680.2,681.2,684.4,669,682.8,705,732.8,757.8,780.4,802.6,815.4,835.6,859.6,880,897,914.2,935.6,953,973,991,1007.2,1027,1042.8,1060.2,1084.8,1111.2,1134.4,1153.6,1179.4,1190.8,1201.4,1200.4,1191.2,1183,1184.2,1193.8,1213.6,1227.4,1240.2,1251,1263.2,1274.6,1294.2,1308.2,1328.2,1343.8,1360.2,1384,1403,1425.4,1446,1470,1490.6,1510.2,1535.8,1561,1583,1601.4,1622.2,1644.8,1660.8,1678.2,1696.6,1713.8,1725.8,1743.6,1749.4,1758,1765.8,1777.6,1786.6,1789.6,1787.8,1791.6,1792.8,1801,1810.2,1819.4,1835.6,1849.8,1861.6,1875.4,1885.4,1892.2,1898.4,1905.8,1917.8,1927.6,1939.8,1944.8,1955.4,1963.4,1973.8,1984,1988.2,1997,2004.4,2011.2,2013.6,2020,2036.2,2036,2047.6,2074.2,2074.4,2081.6,2078.2,2079.2,2076.4,2079.6,2080.8,2092.6,2069.6,2061.6,2048,2040.8,2043.4,2040.4,2047.4,2045.8,2046.6,2035.6,2026.6,2025,2026.6,2034.6,2044,2060.8,2070.2,2073.4,2094.2,2111.8,2118.8,2100.4,2068.2,2036,2004.2,1962.8,1934.2,1913.2,1889.6,1857.6,1823.8,1794.6,1764.2,1743.8,1745.2,1750.4,1748.8,1750,1765.6,1778,1794.6,1804.4,1816.6,1823.8,1829.2,1829.6,1835.4,1835,1833,1828.4,1825,1820,1810,1807,1803.8,1804.2,1801.2,1804.4,1807,1809.2,1809.8,1810.2,1807.2,1806.8,1803,1804.4,1818,1831,1828.2,1829,1814.8,1802.8,1792.6,1777,1756.4,1734.6,1718.4,1699,1678.6,1660.4,1643,1625.2,1602.8,1584.6,1566,1544.2,1531.6,1513.6,1491.4,1469.2,1459.2,1449.2,1435.6,1413.2,1390.8,1367,1350.4,1334.2,1314.4,1298.8,1280.6,1268.2,1258,1245.2,1232.2,1218.2,1196.2,1188,1186.6,1193.8,1202.4,1204.6,1210.8,1211,1204.2,1199.2,1202.6,1211.8,1215.8,1207.6,1201.8,1195,1185.6,1166.2,1141.4,1122.6,1098.4,1077.2,1054,1031.4,1011.8,990.2,967.8,947,915.6,887.4,872.2,859.8,840.6,823,805.6,791.4,771.4,748.2,718,696,684.6,696,692.8,691.6,680.8,668.4,656,656,660.8,663.4,666.6,669.4,672.2,669.4,668.8,664.2,660.2,658.4,657.4,654.4,651.2,641,639.4,642.6]},
+ {id:"20894037180", name:"Breitensteiner Gipfelrunde", date:"2026-11-07", type:"slow", dist:21008, timeS:11249, hr:150,
+  alt:[806,817.6,832.4,846.6,855,867.6,881.2,890,894.4,899,906.2,910.8,916.6,919.8,921.2,922,932.4,935.4,943.4,955.6,968,979.8,981.2,978,986.8,1001.6,1007,1016,1023.6,1032.6,1024.4,1028.2,1028.4,1055.8,1083.6,1087.4,1093.4,1104.8,1120.2,1135.4,1156.2,1190.4,1218.6,1258.2,1290.2,1340.8,1347.4,1351.8,1375,1386.4,1395.8,1417.6,1437.6,1454.4,1467.4,1480.2,1499.4,1519,1537.2,1548.8,1555.8,1558.8,1552,1546.6,1559.6,1576,1590.2,1608.2,1614.8,1596.4,1584.8,1578.8,1558.4,1544.2,1544.6,1549.2,1550.4,1544.2,1521.2,1500,1481.8,1461.2,1441,1422.6,1404.8,1388.4,1365.6,1344,1321.4,1301.8,1287,1270.8,1254.6,1240.4,1234.2,1235.2,1236.4,1229.2,1225,1224.8,1230,1237.8,1250.8,1259.8,1270.4,1271.2,1272,1272.2,1269.8,1265.2,1263.2,1256.8,1249.6,1241,1233.8,1227.6,1223.4,1219.8,1215.4,1209.2,1200,1192.4,1186.2,1178.4,1171.4,1165.2,1158.8,1151.4,1147.6,1146.6,1141.8,1137,1128.8,1121.2,1114.2,1109.2,1105.4,1100.4,1095,1091.4,1088.4,1085.2,1082.6,1079,1075.4,1074.8,1075.8,1081.8,1092.2,1101.4,1105.8,1110.2,1118.4,1126.6,1132.6,1130.8,1128.8,1130.2,1135.4,1140,1143,1144.6,1145.2,1148.4,1156,1164.8,1171.6,1176.6,1183.2,1186.6,1194,1200,1207.4,1215.4,1224,1232,1232.2,1232.2,1240.4,1248,1250.2,1240.2,1234.4,1220.2,1213.4,1209.8,1209.2,1212,1222.4,1227.6,1221,1210.6,1205.8,1201.8,1201.8,1204,1202.2,1204.6,1196.2,1188.4,1178.2,1166.6,1165.2,1168.8,1167.4,1162.4,1158.6,1150,1140,1133,1129.4,1125,1116.4,1110.6,1108.4,1108.6,1103.2,1097.4,1089.6,1088,1091.2,1091.2,1097.6,1108,1118,1123.6,1125.8,1122.6,1122,1124,1127.4,1128.2,1128,1131,1142.6,1158.8,1175.6,1187.2,1173,1153.2,1136.8,1126.6,1108.2,1088.8,1072,1055.6,1045,1036.6,1021.2,1004,988,976.2,965.4,948.8,934.4,917.2,906.4,895.2,887,876,866,860.2,852,841,831.4,819.2,812.8,809,803.2,795.6,789.4,785.6,785.4,788,791.8,793,792.4,792.2,791.6,790.4,788.8,788,788.2,787.4,786.2,786.2,786,785.8,785.6,786.2,788,789.4,788.6,789,789.8,797.2,804.8,813.8,816,812.2]},
+ {id:"20998067154", name:"Gipfeltour am Spitzingsee", date:"2026-11-15", type:"slow", dist:30018, timeS:26185, hr:148, use:false, note:"vermutlich Schnee/sehr technisch, deshalb standardmäßig nicht genutzt",
+  alt:[1111.6,1129,1141.6,1167.6,1194.6,1198,1212.4,1227.4,1237.6,1239.6,1233.8,1241.2,1286.4,1293.8,1322.4,1320.8,1336.2,1361,1368.2,1355.8,1345,1386.2,1416.8,1436.4,1440.8,1449.2,1453.8,1454.8,1483.6,1511.8,1525.6,1528.8,1554.6,1589.2,1608.8,1603.8,1630.2,1665,1684,1703.4,1718.2,1702.2,1660.6,1630.6,1600.6,1570.6,1606.4,1571.2,1613.6,1647.6,1686,1724.4,1722.8,1716.8,1730,1705.4,1694.4,1700.2,1708.8,1721.6,1702.4,1686.4,1681.4,1660.8,1647.6,1625.6,1607.2,1596.6,1578,1559.8,1564.8,1593.4,1621.2,1648.8,1667,1658,1628.6,1601.4,1586.2,1581.2,1574.4,1571,1569.2,1559,1537.6,1533.8,1524.4,1507.6,1508.6,1519.6,1542.6,1557.6,1569.2,1583.8,1605,1620.8,1641.8,1664.2,1682.2,1696.2,1714.6,1740,1768.6,1791.4,1816.6,1842.6,1862.6,1864.2,1873.8,1894.4,1893.2,1863.2,1827,1803.2,1789.2,1766.6,1731.8,1711.6,1680,1644.4,1620.6,1607.6,1599.4,1597.8,1587.4,1566.6,1521.2,1508.2,1503,1501.6,1502.6,1503.2,1504.6,1508.8,1488,1481.4,1471,1466.8,1468.6,1475,1457.6,1473.4,1504.6,1522.6,1540.2,1526.6,1522.6,1527.8,1546.6,1559.4,1576.6,1562,1540.6,1540,1532.2,1521.8,1539.8,1555.8,1513.2,1505,1517.6,1520.6,1536.6,1542.6,1552.6,1582.6,1606.2,1621.6,1647.8,1672.2,1687.4,1708,1707.8,1717.4,1729.8,1753.8,1765,1810.4,1785.4,1768.4,1758.8,1763.4,1769.8,1758.4,1747.6,1792.8,1769.8,1745.2,1730.6,1722.2,1733.6,1720.4,1704.6,1683.8,1677.8,1659.8,1669.2,1676.8,1674,1670.2,1666.6,1676.8,1679.6,1700.2,1712.2,1725.8,1734.4,1753,1750.4,1748.8,1758.2,1759,1767.8,1766.4,1763,1789.6,1793.4,1778.4,1763.6,1757.8,1746.6,1732,1711.2,1700.2,1719.8,1747.6,1753.6,1748.8,1767.6,1772.8,1774.6,1798,1794.8,1781.2,1794.6,1762.2,1733.6,1724.4,1722,1738.2,1728.6,1731.4,1738.6,1738.2,1714.2,1688.6,1680.8,1679.6,1667.4,1658,1639.2,1616.2,1603.6,1580,1561,1544,1531,1516.4,1493.6,1472,1449.2,1427.6,1409.6,1395.2,1400,1408.6,1448.8,1484.6,1445,1438.6,1430.6,1431.2,1391.4,1368.4,1352.6,1349.8,1330,1323.8,1317.2,1299.4,1277.6,1270.2,1253.8,1243.4,1230,1209,1178.8,1142.4,1138.8,1138.8,1124.4,1124.8,1113.8,1103.8,1091.4,1108.6,1126.8,1141.8,1142.4,1139.6]}
+];
+if (typeof module !== "undefined") module.exports = REF_RAW;
+
+/* ===== Rechenkern Verpflegungsrechner ===== */
+const ENG = (() => {
+  const STEP = 200; // m, Segmentlänge
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  // Minetti et al. 2002, J Appl Physiol 93:1039-1046. Energiekosten Laufen in J/kg/m, i = Steigung als Bruch.
+  function minettiC(i) {
+    i = clamp(i, -0.45, 0.45);
+    return 155.4*i**5 - 30.4*i**4 - 43.3*i**3 + 46.3*i**2 + 19.5*i + 3.6;
+  }
+  // Zeitfaktor relativ zur Ebene. Bergauf: Minetti-Kostenverhältnis.
+  // Bergab: Minetti-Vorteil gedämpft (p.down), weil Technik und Bremsen die Geschwindigkeit begrenzen (Annahme).
+  function gradeFactor(i, p) {
+    const r = minettiC(i) / 3.6;
+    if (i >= 0) return r;
+    let f = 1 - (1 - r) * p.down;
+    if (i < -0.22) f += (-i - 0.22) * p.steepDown;
+    return f;
+  }
+  function smooth(arr, w) {
+    const out = new Array(arr.length);
+    for (let k = 0; k < arr.length; k++) {
+      let s = 0, n = 0;
+      for (let j = Math.max(0, k - w); j <= Math.min(arr.length - 1, k + w); j++) { s += arr[j]; n++; }
+      out[k] = s / n;
+    }
+    return out;
+  }
+  // dist[] (m, kumulativ), alt[] (m) -> Segmente à ~STEP m. Höhe je Stützstelle = Mittel aller Rohpunkte im Fenster.
+  function buildSegments(dist, alt) {
+    const total = dist[dist.length - 1];
+    const n = Math.max(1, Math.round(total / STEP));
+    const step = total / n;
+    const sum = new Array(n + 1).fill(0), cnt = new Array(n + 1).fill(0);
+    for (let k = 0; k < dist.length; k++) {
+      const idx = Math.round(dist[k] / step);
+      if (idx >= 0 && idx <= n && isFinite(alt[k])) { sum[idx] += alt[k]; cnt[idx]++; }
+    }
+    let a = [];
+    let j = 0;
+    for (let k = 0; k <= n; k++) {
+      if (cnt[k]) { a.push(sum[k] / cnt[k]); continue; }
+      const x = k * step;
+      while (j < dist.length - 2 && dist[j + 1] < x) j++;
+      const d0 = dist[j], d1 = dist[j + 1] ?? d0;
+      const t = d1 > d0 ? clamp((x - d0) / (d1 - d0), 0, 1) : 0;
+      a.push(alt[j] + ((alt[j + 1] ?? alt[j]) - alt[j]) * t);
+    }
+    // (keine zusätzliche Glättung: Mittelung je Fenster reicht)
+    const segs = [];
+    for (let k = 0; k < n; k++) {
+      const dz = a[k + 1] - a[k];
+      segs.push({ d0: k * step, d: step, z0: a[k], z1: a[k + 1], dz, g: dz / step });
+    }
+    return segs;
+  }
+  function stats(segs) {
+    let up = 0, down = 0, zmin = Infinity, zmax = -Infinity;
+    segs.forEach(s => { if (s.dz > 0) up += s.dz; else down -= s.dz; zmin = Math.min(zmin, s.z0, s.z1); zmax = Math.max(zmax, s.z0, s.z1); });
+    const dist = segs.reduce((x, s) => x + s.d, 0);
+    const zmean = segs.reduce((x, s) => x + (s.z0 + s.z1) / 2 * s.d, 0) / dist;
+    return { dist, up, down, zmin, zmax, zmean };
+  }
+  function equivDist(segs, p) { return segs.reduce((x, s) => x + s.d * gradeFactor(s.g, p), 0); }
+  function analyseRef(ref, p) {
+    const n = ref.alt.length;
+    const dist = ref.distArr || ref.alt.map((_, k) => ref.dist * k / (n - 1));
+    const segs = buildSegments(dist, ref.alt);
+    const E = equivDist(segs, p);
+    const st = stats(segs);
+    const mefp = ref.timeS / (E / 1000);
+    return { id: ref.id, name: ref.name, date: ref.date, type: ref.type, dist: ref.dist, timeS: ref.timeS, hr: ref.hr, use: ref.use,
+      up: st.up, equivKm: E / 1000, mefp, hours: ref.timeS / 3600, q: mefp / p.thrPace };
+  }
+  // Rennen: q = a * T^b (Ermüdung über die Dauer, Riegel-artig), Log-Regression über deine Rennen
+  function fitRace(refs) {
+    const r = refs.filter(x => x.type === "race" && x.use !== false);
+    if (r.length === 0) return { a: 1.15, b: 0.15, n: 0 };
+    if (r.length === 1) return { a: r[0].q / Math.pow(r[0].hours, 0.15), b: 0.15, n: 1 };
+    const X = r.map(x => Math.log(x.hours)), Y = r.map(x => Math.log(x.q));
+    const mx = X.reduce((a, b) => a + b) / X.length, my = Y.reduce((a, b) => a + b) / Y.length;
+    let sxy = 0, sxx = 0;
+    X.forEach((x, k) => { sxy += (x - mx) * (Y[k] - my); sxx += (x - mx) ** 2; });
+    let b = sxx > 1e-6 ? sxy / sxx : 0.15;
+    b = clamp(b, 0.04, 0.25);
+    return { a: Math.exp(my - b * mx), b, n: r.length };
+  }
+  // Renn-HF über die Dauer aus deinen Rennen: HR = c - k ln(T)
+  function fitRaceHR(refs) {
+    const r = refs.filter(x => x.type === "race" && x.use !== false && x.hr);
+    if (r.length < 2) return { c: 188, k: 12 };
+    const X = r.map(x => Math.log(x.hours)), Y = r.map(x => x.hr);
+    const mx = X.reduce((a, b) => a + b) / X.length, my = Y.reduce((a, b) => a + b) / Y.length;
+    let sxy = 0, sxx = 0;
+    X.forEach((x, k) => { sxy += (x - mx) * (Y[k] - my); sxx += (x - mx) ** 2; });
+    let k = sxx > 1e-6 ? -sxy / sxx : 12; k = clamp(k, 4, 25);
+    return { c: my + k * mx, k };
+  }
+  function slowAnchor(refs) {
+    const r = refs.filter(x => x.type === "slow" && x.use !== false);
+    if (!r.length) return { q: 1.75, hr: 148 };
+    // Median gegen Ausreißer (z. B. Schnee)
+    const qs = r.map(x => x.q).sort((a, b) => a - b), hs = r.map(x => x.hr || 148).sort((a, b) => a - b);
+    const med = a => a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+    return { q: med(qs), hr: med(hs) };
+  }
+
+  // ---------- Umgebung ----------
+  const SURF = {
+    dry: { label: "trocken", f: 1.00 }, wet: { label: "nass", f: 1.04 }, mud: { label: "matschig", f: 1.10 },
+    firn: { label: "harter Schnee / Firn", f: 1.12 }, snow1: { label: "Neuschnee bis 10 cm", f: 1.22 },
+    snow2: { label: "Schnee 10–30 cm", f: 1.45 }, snow3: { label: "Tiefschnee > 30 cm", f: 1.85 },
+    ice: { label: "vereist (ohne Grödel)", f: 1.35 }, iceS: { label: "vereist mit Grödel/Spikes", f: 1.12 }
+  };
+  // Temperatur: Optimum ca. 5–12 °C (El Helou et al. 2012; Ely et al. 2007). Steigungen sind eigene Schätzung.
+  function tempFactor(T) {
+    if (T > 12) return 1 + 0.004 * (T - 12) + 0.0002 * Math.max(0, T - 20) ** 2;
+    if (T < -2) return 1 + 0.003 * (-2 - T);
+    return 1;
+  }
+  function windFactor(w) { return w > 25 ? 1 + 0.002 * (w - 25) : 1; }
+
+  // ---------- Plan ----------
+  /* inp: segs, athlete{mass, hrMax, thrPace, carbTol, salty, gutTraining}, cal{race{a,b}, raceHR{c,k}, slow{q,hr}},
+     run{type, hr?, targetS?, startMin, techF}, env{T, Tz, wind, surface, snowLine, snowSurf},
+     model{down, steepDown, walkG}, fuel{interval, items[], flaskL, flasks, drinkServ, drinkCarb, drinkNa, useFlask, vps[] (km)} */
+  function plan(inp) {
+    const { segs, athlete: A, cal, run, env, model: M, fuel: F } = inp;
+    const st = stats(segs);
+    const segEnv = segs.map(s => {
+      const z = (s.z0 + s.z1) / 2;
+      const T = env.T - 0.0065 * (z - env.Tz);
+      const surf = (env.snowLine != null && z >= env.snowLine) ? env.snowSurf : env.surface;
+      const f = tempFactor(T) * windFactor(env.wind) * (SURF[surf]?.f ?? 1) * (run.techF || 1);
+      return { T, surf, f, z };
+    });
+    const E = segs.reduce((x, s, k) => x + s.d * gradeFactor(s.g, M) * segEnv[k].f, 0) / 1000; // äquiv. km inkl. Umgebung
+    const E0 = equivDist(segs, M) / 1000;
+    const raceQ = T => cal.race.a * Math.pow(Math.max(0.5, T), cal.race.b);
+    const raceHR = T => cal.raceHR.c - cal.raceHR.k * Math.log(Math.max(0.5, T));
+    // q aus Ziel-HF: lineare Interpolation zwischen langsamem Anker und Renn-Anker bei gleicher Dauer
+    const qFromHR = (h, T) => {
+      const h1 = raceHR(T), q1 = raceQ(T), h0 = cal.slow.hr, q0 = cal.slow.q;
+      if (h1 - h0 < 3) return q1;
+      const t = (h - h0) / (h1 - h0);
+      return t <= 1 ? q0 + (q1 - q0) * t : q1 * (1 - 0.15 * (t - 1)); // oberhalb Renn-HF nur leicht schneller
+    };
+    const hrFromQ = (q, T) => {
+      const h1 = raceHR(T), q1 = raceQ(T), h0 = cal.slow.hr, q0 = cal.slow.q;
+      if (Math.abs(q0 - q1) < 1e-3) return h1;
+      const t = (q0 - q) / (q0 - q1);
+      return h0 + (h1 - h0) * (t <= 1 ? t : 1 + (1 - q / q1) / 0.15);
+    };
+    let T = (E * A.thrPace * 1.4) / 3600, q, hr, mode;
+    if (run.targetS) {
+      T = run.targetS / 3600; q = run.targetS / E / A.thrPace; hr = hrFromQ(q, T); mode = "target";
+    } else {
+      for (let it = 0; it < 40; it++) {
+        hr = run.hr != null ? run.hr : (run.type === "race" ? raceHR(T) : run.type === "fast" ? Math.min(raceHR(T) - 6, 172) : cal.slow.hr);
+        q = run.type === "race" && run.hr == null ? raceQ(T) : qFromHR(hr, T);
+        const Tn = E * q * A.thrPace / 3600;
+        if (Math.abs(Tn - T) < 1e-4) { T = Tn; break; }
+        T = Tn;
+      }
+      mode = "model";
+    }
+    const flatPace = q * A.thrPace; // s/km flach-äquivalent, ohne Umgebung
+    // leichte Ermüdungsdrift innerhalb des Laufs (+/-3 %), normiert auf gleiche Gesamtzeit
+    const drift = run.type === "race" ? 0.06 : 0.03;
+    let raw = segs.map((s, k) => s.d / 1000 * flatPace * gradeFactor(s.g, M) * segEnv[k].f);
+    let tot = 0; const cumRaw = raw.map(x => (tot += x, tot));
+    raw = raw.map((x, k) => x * (1 + drift * (cumRaw[k] / tot - 0.5)));
+    const sc = (T * 3600) / raw.reduce((a, b) => a + b, 0);
+    raw = raw.map(x => x * sc);
+    let t = 0;
+    const segT = raw.map((dt, k) => { const t0 = t; t += dt; return { ...segs[k], ...segEnv[k], t0, t1: t, dt, pace: dt / (segs[k].d / 1000), walk: segs[k].g > M.walkG }; });
+    const totalS = t;
+
+    // Intensität 0..1 (Basis für Carbs, Schweiß)
+    const int01 = clamp((hr - 130) / (Math.max(150, raceHR(2)) - 130), 0, 1);
+    const rpe = clamp(3 + (hr - cal.slow.hr) / Math.max(5, raceHR(T) - cal.slow.hr) * (raceRPE(T) - 3), 1, 10);
+    function raceRPE(T) { return clamp(9.3 - 0.5 * Math.log(Math.max(1, T)) * 1.4, 7, 9.5); }
+
+    // Kohlenhydrate (Thomas et al. 2016; Jeukendrup 2014)
+    const H = totalS / 3600;
+    let lo, hi, band;
+    if (H < 0.75) { lo = 0; hi = 0; band = "< 45 min: keine Zufuhr nötig"; }
+    else if (H < 1.25) { lo = 0; hi = 30; band = "45–75 min: bis 30 g/h"; }
+    else if (H < 2.5) { lo = 30; hi = 60; band = "1,25–2,5 h: 30–60 g/h"; }
+    else { lo = 60; hi = 90; band = "> 2,5 h: 60–90 g/h (Glukose:Fruktose)"; }
+    let carbH = (lo * (0.5 + 0.5 * int01)) + (hi - lo * (0.5 + 0.5 * int01)) * int01;
+    if (run.type === "race" && H >= 2.5) carbH = Math.max(carbH, 75);
+    if (A.gutTraining && H >= 1.25) carbH = Math.max(carbH, A.carbTol);
+    carbH = Math.min(carbH, A.carbTol);
+    if (H > 2.5 && hi > A.carbTol) hi = A.carbTol;
+
+    // Energie (Minetti, metabolisch) + Umgebung
+    const kcal = segT.reduce((x, s) => x + minettiC(s.g) * A.mass * s.d * ((SURF[s.surf]?.f ?? 1) > 1.1 ? 1 + ((SURF[s.surf].f - 1) * 0.6) : 1), 0) / 4184;
+
+    // Schweiß / Flüssigkeit / Natrium (Schätzung; Sawka et al. 2007, Baker 2017)
+    const Tmean = segT.reduce((x, s) => x + s.T * s.dt, 0) / totalS;
+    const sweatEst = clamp((0.35 + 0.9 * int01) * ((A.bsa || 1.9) / 1.8) * (1 + 0.035 * (Tmean - 15)), 0.3, 2.2);
+    const sweat = A.sweatRate || sweatEst;
+    const fluidH = clamp(sweat * 0.65, 0.3, 0.8);
+    const sweatNa = A.salty ? 1200 : 800;
+    let naH = clamp(sweat * sweatNa * 0.5, 250, 1000);
+    if (H < 1.5) naH = Math.min(naH, 300);
+
+    // ---------- Verpflegung verteilen ----------
+    const items = F.items.filter(x => x.on && x.carb > 0);
+    const useFlask = F.useFlask && H >= 1;
+    const drinkGL = useFlask ? (F.drinkServ * F.drinkCarb) / F.flaskL : 0; // g pro Liter Flask
+    const drinkCarbH = useFlask ? Math.min(fluidH * drinkGL, carbH * (F.drinkShare ?? 0.4)) : 0;
+    const sipH = useFlask && drinkGL > 0 ? drinkCarbH / drinkGL : 0; // L/h aus der Flask
+    const solidH = Math.max(0, carbH - drinkCarbH);
+    const cafMax = A.mass * (A.cafPerKg ?? 3);
+    const interval = F.interval * 60;
+    const events = [];
+    let delivered = 0, caf = 0, lastIdx = -1, naItems = 0, picks = 0;
+    const atTime = ts => segT.find(s => s.t1 >= ts) || segT[segT.length - 1];
+    const counts = {};
+    if (H >= 0.75 && items.length) {
+      const first = Math.min(interval, 25 * 60);
+      for (let ts = first; ts < totalS - 8 * 60; ts += interval) {
+        const s = atTime(ts);
+        const need = solidH * ts / 3600 - delivered;
+        const prog = ts / totalS;
+        const taken = [];
+        let guard = 0, deficit = need;
+        while (guard++ < 3) {
+          const minC = Math.min(...items.map(x => x.carb));
+          if (deficit < minC * 0.55) break;
+          // Kandidaten
+          let cands = items.filter(x => {
+            if (x.caf > 0 && (prog < 0.4 || caf + x.caf > cafMax)) return false;
+            if (x.kind === "bar" && (prog > 0.75 || (!s.walk && Math.abs(s.g) > 0.04))) return false;
+            if (x.kind === "can" && (counts[x.id] || 0) >= (x.max ?? 1)) return false;
+            if (x.max != null && (counts[x.id] || 0) >= x.max) return false;
+            return true;
+          });
+          if (!cands.length) cands = items.filter(x => !(x.caf > 0) && x.kind !== "can");
+          if (!cands.length) break;
+          // Bewertung: Priorität, Abwechslung, Passung zum Defizit
+          cands.sort((a, b) => score(b) - score(a));
+          function score(x) {
+            let sc = (x.prio || 1) * 10 - Math.abs(deficit - x.carb) * 0.15;
+            if (x.id === lastIdx) sc -= 4;
+            sc -= 6 * (counts[x.id] || 0) / (1 + picks) * items.length / 2;
+            if (x.kind === "bar" && s.walk) sc += 6;
+            if (x.caf > 0) sc += 3 * prog;
+            if (x.kind === "can") sc += 4;
+            return sc;
+          }
+          const pick = cands[0];
+          taken.push(pick); delivered += pick.carb; deficit -= pick.carb; caf += pick.caf || 0; naItems += pick.na || 0;
+          counts[pick.id] = (counts[pick.id] || 0) + 1; lastIdx = pick.id; picks++;
+        }
+        events.push({ type: "fuel", t: ts, km: (s.d0 + s.d) / 1000, z: s.z1, items: taken, sip: useFlask ? sipH * interval / 3600 : 0, walk: s.walk, g: s.g });
+      }
+    }
+    // Verpflegungsstationen
+    const vps = (F.vps || []).filter(v => v.km > 0 && v.km * 1000 < st.dist).sort((a, b) => a.km - b.km);
+    vps.forEach(v => {
+      const s = segT.find(x => x.d0 + x.d >= v.km * 1000) || segT[segT.length - 1];
+      const frac = (v.km * 1000 - s.d0) / s.d;
+      events.push({ type: "vp", t: s.t0 + s.dt * clamp(frac, 0, 1), km: v.km, z: s.z0 + (s.z1 - s.z0) * clamp(frac, 0, 1), name: v.name || "VP" });
+    });
+    events.sort((a, b) => a.t - b.t);
+    // Abschnitte zwischen VPs (Start -> VP1 -> ... -> Ziel)
+    const bounds = [0, ...vps.map(v => events.find(e => e.type === "vp" && e.km === v.km).t), totalS];
+    const sections = [];
+    for (let k = 0; k < bounds.length - 1; k++) {
+      const a = bounds[k], b = bounds[k + 1];
+      const evs = events.filter(e => e.type === "fuel" && e.t > a && e.t <= b);
+      const it = {};
+      evs.forEach(e => e.items.forEach(x => it[x.name] = (it[x.name] || 0) + 1));
+      const sA = segT.filter(s => s.t0 >= a - 1 && s.t1 <= b + 1);
+      const dist = sA.reduce((x, s) => x + s.d, 0) / 1000;
+      const up = sA.reduce((x, s) => x + Math.max(0, s.dz), 0);
+      const fluid = fluidH * (b - a) / 3600;
+      sections.push({ from: k === 0 ? "Start" : vps[k - 1].name || "VP " + k, to: k === bounds.length - 2 ? "Ziel" : (vps[k].name || "VP " + (k + 1)), tA: a, tB: b, dist, up, items: it, fluid,
+        flasksNeeded: useFlask ? Math.ceil(sipH * (b - a) / 3600 / F.flaskL - 0.05) : 0 });
+    }
+    // Packliste
+    const pack = {};
+    events.filter(e => e.type === "fuel").forEach(e => e.items.forEach(x => pack[x.name] = (pack[x.name] || 0) + 1));
+    const drinkFlasks = useFlask ? Math.ceil(sipH * H / F.flaskL - 0.1) : 0;
+    const carbsTotal = delivered + drinkCarbH * H;
+    const naTotal = naItems + (useFlask ? sipH * H * (F.drinkServ * F.drinkNa) / F.flaskL : 0);
+    return {
+      st, E, E0, totalS, flatPace, q, hr, rpe, int01, mode, segT, events, sections, pack, drinkFlasks,
+      carbH, carbBand: band, carbLo: lo, carbHi: hi, drinkCarbH, solidH, carbsTotal, kcal,
+      sweat, fluidH, naH, naTotal, naGap: Math.max(0, naH * H - naTotal), caf, cafMax, Tmean,
+      raceQ, raceHR, useFlask, sipH
+    };
+  }
+  return { STEP, SURF, minettiC, gradeFactor, buildSegments, stats, equivDist, analyseRef, fitRace, fitRaceHR, slowAnchor, tempFactor, plan, clamp };
+})();
+if (typeof module !== "undefined") module.exports = ENG;
+
+</script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const E = ENG;
+const KEY = "vr.v1";
+const fmtT = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h + ":" + String(m).padStart(2, "0"); };
+const fmtP = s => { if (!isFinite(s) || s <= 0) return "–"; s = Math.round(s); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+const parseHM = v => { if (!v) return null; const m = String(v).trim().match(/^(\d{1,2})[:.,h ]?(\d{2})?$/); if (!m) return null; return (+m[1]) * 3600 + (+(m[2] || 0)) * 60; };
+const parseMS = v => { const m = String(v).trim().match(/^(\d{1,2})[:.](\d{2})$/); return m ? (+m[1]) * 60 + (+m[2]) : NaN; };
+const nf = (x, d = 0) => isFinite(x) ? x.toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }) : "–";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const DEFAULT_PRODUCTS = [
+  { id: "g21", name: "4E 2:1 Gel", kind: "gel", carb: 30, na: 100, caf: 0, prio: 1, on: true },
+  { id: "g21c", name: "4E 2:1 Gel+ (Koffein)", kind: "gel", carb: 30, na: 100, caf: 75, prio: 1, on: true },
+  { id: "bar", name: "4E 2:1 Bar", kind: "bar", carb: 30, na: 100, caf: 0, prio: 1, on: true },
+  { id: "jel", name: "4E 2:1 Jelly Bar", kind: "chew", carb: 20, na: 0, caf: 0, prio: 1, on: true },
+  { id: "jelc", name: "4E 2:1 Jelly Bar+ (Koffein)", kind: "chew", carb: 20, na: 0, caf: 50, prio: 1, on: false },
+  { id: "n45", name: "Nduranz Nrgy Gel 45", kind: "gel", carb: 45, na: 0, caf: 0, prio: 1, on: false },
+  { id: "can", name: "Energydrink-Dose 0,25 l", kind: "can", carb: 27, na: 100, caf: 80, prio: 1, on: true, max: 1, trainingOnly: true }
+];
+const SAMPLE_VPS = [{ name: "VP 1 (Beispiel)", km: 11 }, { name: "VP 2 (Beispiel)", km: 22 }, { name: "VP 3 (Beispiel)", km: 32 }];
+
+let S = {
+  type: "race", course: null, vps: [], manual: [{ km: 8, up: 600, down: 100, vp: true }, { km: 10, up: 400, down: 700, vp: true }, { km: 7, up: 150, down: 350, vp: false }],
+  products: JSON.parse(JSON.stringify(DEFAULT_PRODUCTS)), refs: JSON.parse(JSON.stringify(REF_RAW)), intLast: null, wx: null
+};
+const FIELDS = ["lat", "lon", "date", "start", "target", "tech", "hr", "rpe", "pct", "walkG", "T", "Tz", "wind", "surface", "snowLine", "snowSurf", "interval", "cafKg", "cafRaceOnly", "useFlask", "flaskL", "flasks", "drinkServ", "drinkShare", "useCan", "mass", "height", "birth", "hrMax", "lthr", "thrPace", "carbTol", "sweatRate", "salty", "gut", "down", "manZ0"];
+
+// Selects füllen
+for (const id of ["surface", "snowSurf"]) {
+  const sel = $(id);
+  Object.entries(E.SURF).forEach(([k, v]) => { const o = document.createElement("option"); o.value = k; o.textContent = v.label + (v.f !== 1 ? ` (+${Math.round((v.f - 1) * 100)} %)` : ""); sel.appendChild(o); });
+}
+$("snowSurf").value = "snow1";
+(() => { const d = new Date(); d.setDate(d.getDate() + 2); $("date").value = d.toISOString().slice(0, 10); })();
+
+function save() {
+  try {
+    const f = {}; FIELDS.forEach(id => { const el = $(id); f[id] = el.type === "checkbox" ? el.checked : el.value; });
+    localStorage.setItem(KEY, JSON.stringify({ f, S: { ...S, wx: null } }));
+  } catch (e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY); if (!raw) return false;
+    const d = JSON.parse(raw);
+    Object.entries(d.f || {}).forEach(([id, v]) => { const el = $(id); if (!el) return; if (el.type === "checkbox") el.checked = !!v; else el.value = v; });
+    Object.assign(S, d.S || {});
+    return true;
+  } catch (e) { return false; }
+}
+
+// ---------- Strecke ----------
+function haversine(a, b) {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (b[0] - a[0]) * toR, dLon = (b[1] - a[1]) * toR;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * toR) * Math.cos(b[0] * toR) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function parseGPX(text) {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("Die Datei ist kein gültiges GPX.");
+  let pts = [...doc.getElementsByTagName("trkpt")];
+  if (!pts.length) pts = [...doc.getElementsByTagName("rtept")];
+  if (pts.length < 5) throw new Error("In der GPX-Datei stehen zu wenige Trackpunkte.");
+  const ll = [], alt = [], time = [];
+  pts.forEach(p => {
+    const e = p.getElementsByTagName("ele")[0], t = p.getElementsByTagName("time")[0];
+    ll.push([+p.getAttribute("lat"), +p.getAttribute("lon")]);
+    alt.push(e ? +e.textContent : NaN); time.push(t ? Date.parse(t.textContent) : NaN);
+  });
+  if (alt.every(a => !isFinite(a))) throw new Error("Die GPX-Datei enthält keine Höhendaten.");
+  for (let k = 0; k < alt.length; k++) if (!isFinite(alt[k])) alt[k] = alt[k - 1] ?? alt.find(isFinite);
+  const dist = [0];
+  for (let k = 1; k < ll.length; k++) dist.push(dist[k - 1] + haversine(ll[k - 1], ll[k]));
+  const name = doc.getElementsByTagName("name")[0]?.textContent?.trim() || "GPX-Strecke";
+  // Wegpunkte -> VP-Vorschläge
+  const vps = [...doc.getElementsByTagName("wpt")].map(w => {
+    const p = [+w.getAttribute("lat"), +w.getAttribute("lon")];
+    let best = 0, bd = Infinity;
+    for (let k = 0; k < ll.length; k += Math.max(1, Math.floor(ll.length / 3000))) { const d = haversine(p, ll[k]); if (d < bd) { bd = d; best = k; } }
+    return bd < 300 ? { name: w.getElementsByTagName("name")[0]?.textContent?.trim() || "VP", km: Math.round(dist[best] / 100) / 10 } : null;
+  }).filter(Boolean);
+  const t0 = time.find(isFinite), t1 = [...time].reverse().find(isFinite);
+  return { name, dist, alt, lat: ll[0][0], lon: ll[0][1], vps, durS: isFinite(t0) && isFinite(t1) ? (t1 - t0) / 1000 : null };
+}
+function setCourse(c, vps) {
+  // Höhenprofil auf max. ~4000 Punkte reduzieren
+  let { dist, alt } = c;
+  if (dist.length > 4000) { const k = Math.ceil(dist.length / 4000); dist = dist.filter((_, i) => i % k === 0); alt = alt.filter((_, i) => i % k === 0); }
+  S.course = { name: c.name, dist, alt, src: c.src || "gpx" };
+  if (vps) S.vps = vps;
+  if (c.lat != null) { $("lat").value = c.lat.toFixed(4); $("lon").value = c.lon.toFixed(4); }
+  render();
+}
+async function readFile(file) { return await file.text(); }
+$("gpx").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const c = parseGPX(await readFile(f)); setCourse(c, c.vps.length ? c.vps : S.vps); $("vpHint").textContent = c.vps.length ? `${c.vps.length} Wegpunkte als VP übernommen.` : "Keine Wegpunkte in der GPX gefunden. VPs bitte von Hand eintragen."; }
+  catch (err) { $("vpHint").textContent = err.message; }
+  e.target.value = "";
+});
+const drop = $("drop");
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", async e => {
+  e.preventDefault(); drop.classList.remove("over");
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  try { const c = parseGPX(await readFile(f)); setCourse(c, c.vps.length ? c.vps : S.vps); } catch (err) { $("vpHint").textContent = err.message; }
+});
+function loadSample() {
+  const r = REF_RAW[0];
+  setCourse({ name: "Mittenwald Trail (Profil aus Strava)", dist: r.alt.map((_, k) => r.dist * k / (r.alt.length - 1)), alt: r.alt, lat: 47.4425, lon: 11.2606, src: "sample" }, JSON.parse(JSON.stringify(SAMPLE_VPS)));
+  $("vpHint").textContent = "Die VP-Positionen im Beispiel sind ausgedacht. Trag die echten aus der Ausschreibung ein.";
+}
+$("loadSample").onclick = loadSample;
+
+// Manuelle Abschnitte
+function renderManual() {
+  const tb = $("manTbl").tBodies[0]; tb.innerHTML = "";
+  S.manual.forEach((m, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><input type="number" step="0.1" min="0.1" value="${m.km}" data-k="km" aria-label="km"></td><td><input type="number" step="10" min="0" value="${m.up}" data-k="up" aria-label="Höhenmeter hoch"></td><td><input type="number" step="10" min="0" value="${m.down}" data-k="down" aria-label="Höhenmeter runter"></td><td><input type="checkbox" ${m.vp ? "checked" : ""} data-k="vp" aria-label="VP am Ende"></td><td><button class="btn small" type="button" aria-label="Abschnitt löschen">×</button></td>`;
+    tr.querySelectorAll("input").forEach(inp => inp.addEventListener("input", () => { m[inp.dataset.k] = inp.type === "checkbox" ? inp.checked : +inp.value; save(); }));
+    tr.querySelector("button").onclick = () => { S.manual.splice(i, 1); renderManual(); save(); };
+    tb.appendChild(tr);
+  });
+}
+$("toManual").onclick = () => { $("manualBox").hidden = !$("manualBox").hidden; renderManual(); };
+$("manAdd").onclick = () => { S.manual.push({ km: 5, up: 300, down: 300, vp: false }); renderManual(); save(); };
+$("manApply").onclick = () => {
+  const dist = [0], alt = [+$("manZ0").value || 800], vps = [];
+  let d = 0, z = alt[0], n = 1;
+  S.manual.forEach(m => {
+    const L = m.km * 1000; if (!(L > 0)) return;
+    const tot = m.up + m.down;
+    const dUp = tot > 0 ? L * m.up / tot : L / 2;
+    const stepN = Math.max(4, Math.round(L / 50));
+    for (let k = 1; k <= stepN; k++) {
+      const x = L * k / stepN;
+      const zz = x <= dUp ? z + m.up * (dUp > 0 ? x / dUp : 0) : z + m.up - m.down * ((x - dUp) / Math.max(1, L - dUp));
+      dist.push(d + x); alt.push(zz);
+    }
+    d += L; z = z + m.up - m.down;
+    if (m.vp) vps.push({ name: "VP " + n++, km: Math.round(d / 100) / 10 });
+  });
+  if (dist.length < 3) return;
+  setCourse({ name: "Manuelle Strecke", dist, alt, src: "manual" }, vps);
+};
+
+// VPs
+function renderVPs() {
+  const tb = $("vpTbl").tBodies[0]; tb.innerHTML = "";
+  S.vps.forEach((v, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><input type="text" value="${esc(v.name)}" aria-label="Name"></td><td><input type="number" step="0.1" value="${v.km}" aria-label="km"></td><td><button class="btn small" type="button" aria-label="VP löschen">×</button></td>`;
+    const [n, k] = tr.querySelectorAll("input");
+    n.addEventListener("change", () => { v.name = n.value; render(); });
+    k.addEventListener("change", () => { v.km = +k.value; render(); });
+    tr.querySelector("button").onclick = () => { S.vps.splice(i, 1); render(); };
+    tb.appendChild(tr);
+  });
+}
+$("vpAdd").onclick = () => { S.vps.push({ name: "VP " + (S.vps.length + 1), km: 0 }); renderVPs(); };
+
+// Produkte
+function renderProducts() {
+  const tb = $("prodTbl").tBodies[0]; tb.innerHTML = "";
+  S.products.forEach((p, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><input type="checkbox" ${p.on ? "checked" : ""} data-k="on" aria-label="aktiv"></td>
+      <td><input type="text" value="${esc(p.name)}" data-k="name" style="min-width:130px" aria-label="Produktname"></td>
+      <td><select data-k="kind" aria-label="Art"><option value="gel">Gel</option><option value="bar">Riegel</option><option value="chew">Jelly</option><option value="can">Dose</option></select></td>
+      <td><input type="number" value="${p.carb}" data-k="carb" min="0" aria-label="Kohlenhydrate g"></td>
+      <td><input type="number" value="${p.na}" data-k="na" min="0" aria-label="Natrium mg"></td>
+      <td><input type="number" value="${p.caf}" data-k="caf" min="0" aria-label="Koffein mg"></td>
+      <td><input type="number" value="${p.prio}" data-k="prio" min="0" max="3" step="0.5" aria-label="Priorität"></td>
+      <td><button class="btn small" type="button" aria-label="Produkt löschen">×</button></td>`;
+    tr.querySelector("select").value = p.kind;
+    tr.querySelectorAll("input,select").forEach(el => el.addEventListener("change", () => {
+      const k = el.dataset.k; p[k] = el.type === "checkbox" ? el.checked : (el.type === "number" ? +el.value : el.value); render();
+    }));
+    tr.querySelector("button").onclick = () => { S.products.splice(i, 1); render(); };
+    tb.appendChild(tr);
+  });
+}
+$("prodAdd").onclick = () => { S.products.push({ id: "p" + Date.now(), name: "Eigenes Produkt", kind: "gel", carb: 25, na: 50, caf: 0, prio: 1, on: true }); render(); };
+$("prodReset").onclick = () => { S.products = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS)); render(); };
+
+// Lauftyp
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+  S.type = b.dataset.type; S.intLast = null; ["hr", "rpe", "pct"].forEach(id => $(id).value = "");
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  $("walkG").value = S.type === "race" ? 15 : S.type === "fast" ? 13 : 10;
+  $("interval").value = S.type === "race" ? 25 : 30;
+  render();
+});
+["hr", "rpe", "pct"].forEach(id => $(id).addEventListener("input", () => { S.intLast = $(id).value ? id : null; if ($(id).value) $("target").value = ""; render(); }));
+$("target").addEventListener("input", () => { if ($("target").value) { S.intLast = null; } render(); });
+$("resetInt").onclick = () => { S.intLast = null; ["hr", "rpe", "pct"].forEach(id => $(id).value = ""); $("target").value = ""; render(); };
+$("resetAll").onclick = () => { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); };
+
+// ---------- Kalibrierung ----------
+function modelP() { return { down: +$("down").value, steepDown: 1.5, walkG: (+$("walkG").value || 15) / 100, thrPace: parseMS($("thrPace").value) || 235 }; }
+function calibrate() {
+  const p = modelP();
+  const refs = S.refs.map(r => E.analyseRef(r, p));
+  return { refs, race: E.fitRace(refs), raceHR: E.fitRaceHR(refs), slow: E.slowAnchor(refs) };
+}
+function renderCal(cal) {
+  const tb = $("calTbl").tBodies[0]; tb.innerHTML = "";
+  cal.refs.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    const typ = r.use === false ? "off" : r.type;
+    tr.innerHTML = `<td title="${esc(S.refs[i].note || "")}">${esc(r.name)}<br><span class="hint">${esc(r.date || "")}${S.refs[i].note ? " · " + esc(S.refs[i].note) : ""}</span></td>
+      <td><select aria-label="Typ"><option value="race">Rennen</option><option value="slow">locker</option><option value="off">ignorieren</option></select></td>
+      <td class="num">${nf(r.dist / 1000, 1)}</td><td class="num">${nf(r.up)}</td><td class="num">${fmtT(r.timeS)}</td><td class="num">${r.hr || "–"}</td><td class="num">${fmtP(r.mefp)}</td>
+      <td><button class="btn small" type="button" aria-label="Lauf entfernen">×</button></td>`;
+    const sel = tr.querySelector("select"); sel.value = typ;
+    sel.onchange = () => { const ref = S.refs[i]; if (sel.value === "off") ref.use = false; else { ref.use = true; ref.type = sel.value; } render(); };
+    tr.querySelector("button").onclick = () => { S.refs.splice(i, 1); render(); };
+    tb.appendChild(tr);
+  });
+  const thr = modelP().thrPace;
+  const f = cal.race, h = cal.raceHR;
+  const ex = [3, 6, 10].map(t => `${t} h: ${fmtP(thr * f.a * Math.pow(t, f.b))} /km, ~${Math.round(h.c - h.k * Math.log(t))} bpm`).join(" · ");
+  $("calFit").innerHTML = `<b>Deine Renn-Kurve</b> (${f.n} Rennen): flach-äquivalente Pace ${ex}.<br><b>Lockerer Anker:</b> ${fmtP(thr * cal.slow.q)} /km bei ~${Math.round(cal.slow.hr)} bpm.`;
+  $("calTag").textContent = `${cal.refs.filter(r => r.use !== false).length} Läufe`;
+}
+
+// ---------- Strava (mcp) ----------
+$("gpxRef").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const c = parseGPX(await readFile(f));
+    if (!c.durS) throw new Error("Die GPX-Datei hat keine Zeitstempel. Für die Kalibrierung brauche ich die gelaufene Zeit.");
+    S.refs.push({ id: "gpx" + Date.now(), name: c.name, date: "", type: "race", use: true, dist: c.dist[c.dist.length - 1], timeS: c.durS, hr: null, alt: c.alt, distArr: c.dist });
+    render();
+  } catch (err) { $("stravaStatus").textContent = err.message; }
+  e.target.value = "";
+});
+
+// ---------- Wetter (Open-Meteo) ----------
+$("wxLoad").onclick = async () => {
+  const st = $("wxStatus");
+  const lat = +$("lat").value, lon = +$("lon").value, date = $("date").value;
+  if (!$("lat").value || !isFinite(lat) || !isFinite(lon)) { st.textContent = "Für die Vorhersage brauche ich Breiten- und Längengrad (kommt automatisch aus der GPX)."; return; }
+  if (!date) { st.textContent = "Bitte zuerst ein Datum wählen."; return; }
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&hourly=temperature_2m,precipitation,wind_speed_10m,snow_depth,freezing_level_height,weather_code&start_date=${date}&end_date=${date}&timezone=auto`;
+  st.textContent = "Frage Open-Meteo ab …";
+  try {
+    const resp = await fetch(url);
+    const j = await resp.json();
+    if (!resp.ok || !j.hourly) throw new Error(j.reason || "Keine Vorhersage für dieses Datum (Open-Meteo reicht etwa 16 Tage voraus).");
+    const h = j.hourly; const startH = +($("start").value || "07:00").slice(0, 2);
+    const durH = Math.max(1, Math.ceil((LAST ? LAST.totalS : 4 * 3600) / 3600));
+    const idx = h.time.map((t, i) => i).filter(i => { const hh = +h.time[i].slice(11, 13); return hh >= startH && hh <= Math.min(23, startH + durH); });
+    const avg = k => idx.reduce((x, i) => x + (h[k][i] ?? 0), 0) / idx.length;
+    const T = avg("temperature_2m"), w = avg("wind_speed_10m"), pr = idx.reduce((x, i) => x + (h.precipitation[i] || 0), 0), fz = avg("freezing_level_height"), sd = Math.max(...idx.map(i => h.snow_depth[i] || 0));
+    $("T").value = T.toFixed(1); $("Tz").value = Math.round(j.elevation); $("wind").value = Math.round(w);
+    if (pr > 1.5) $("surface").value = "wet";
+    if (sd >= 0.01) { $("snowLine").value = Math.round(j.elevation / 50) * 50; $("snowSurf").value = sd > 0.3 ? "snow3" : sd > 0.1 ? "snow2" : "snow1"; }
+    st.innerHTML = `Open-Meteo, ${esc(date)}, ${startH}–${Math.min(23, startH + durH)} Uhr: Ø ${nf(T, 1)} °C auf ${Math.round(j.elevation)} m, Wind ${nf(w)} km/h, Niederschlag ${nf(pr, 1)} mm, Nullgradgrenze ~${nf(fz)} m, Schneehöhe am Rasterpunkt ${nf(sd * 100)} cm. Liegenden Schnee weiter oben sieht die Vorhersage nicht zuverlässig, Schneegrenze bitte prüfen (z. B. Lawinenwarndienst, Webcams).`;
+    render();
+  } catch (e) { st.textContent = "Die Vorhersage konnte ich nicht laden: " + (e.message || "Netzwerkfehler") + " Trag die Werte bitte von Hand ein."; }
+};
+
+// ---------- Rendern ----------
+let LAST = null;
+function athlete() {
+  const mass = +$("mass").value || 85, hcm = +$("height").value || 180;
+  const bsa = 0.007184 * Math.pow(mass, 0.425) * Math.pow(hcm, 0.725);
+  const sr = +$("sweatRate").value || null;
+  return { mass, bsa, hrMax: +$("hrMax").value || 200, thrPace: parseMS($("thrPace").value) || 235, carbTol: +$("carbTol").value || 90, salty: $("salty").checked, gutTraining: $("gut").checked && S.type !== "race", cafPerKg: +$("cafKg").value, sweatRate: sr };
+}
+function render() {
+  renderVPs(); renderProducts();
+  const cal = calibrate(); renderCal(cal);
+  const A = athlete();
+  // Alter / HFmax-Hinweis
+  const bd = $("birth").value ? new Date($("birth").value) : null;
+  const age = bd ? Math.floor((Date.now() - bd) / (365.25 * 864e5)) : null;
+  $("athHint").textContent = `${age != null ? age + " Jahre · " : ""}Körperoberfläche ${nf(A.bsa, 2)} m² (Du Bois) · HFmax 202 aus deinen Strava-Zonen zurückgerechnet, Schwellen-HF ~182 aus dem 6×1000-m-Training vom 05.11.`;
+  $("athTag").textContent = `${A.mass} kg · ${$("thrPace").value} /km`;
+  if (!S.course) { loadSample(); return; }
+  const segs = E.buildSegments(S.course.dist, S.course.alt);
+  const st = E.stats(segs);
+  $("courseTag").textContent = `${nf(st.dist / 1000, 1)} km · ${nf(st.up)} Hm`;
+  const M = modelP();
+  const items = S.products.filter(p => p.on && !(p.trainingOnly && (S.type === "race" || !$("useCan").checked)))
+    .map(p => ({ ...p, caf: ($("cafRaceOnly").checked && S.type !== "race") ? 0 : p.caf, on: !(p.caf > 0 && $("cafRaceOnly").checked && S.type !== "race" && p.kind !== "can") }));
+  const base = {
+    segs, athlete: A, cal,
+    env: { T: +$("T").value, Tz: +$("Tz").value, wind: +$("wind").value, surface: $("surface").value, snowLine: $("snowLine").value === "" ? null : +$("snowLine").value, snowSurf: $("snowSurf").value },
+    model: M,
+    fuel: { interval: +$("interval").value || 25, items, flaskL: +$("flaskL").value || 0.5, flasks: +$("flasks").value || 2, drinkServ: +$("drinkServ").value || 2, drinkCarb: 30, drinkNa: 100, drinkShare: (+$("drinkShare").value) / 100, useFlask: $("useFlask").checked && S.type === "race", vps: S.vps }
+  };
+  const run = { type: S.type, techF: +$("tech").value };
+  const tgt = parseHM($("target").value);
+  // Intensität: was zuletzt eingetragen wurde, bestimmt die anderen
+  const pre = E.plan({ ...base, run: { ...run } });
+  const Tpre = pre.totalS / 3600;
+  const raceRPE = T => Math.max(7, Math.min(9.5, 9.3 - 0.7 * Math.log(Math.max(1, T))));
+  if (tgt) run.targetS = tgt;
+  else if (S.intLast === "hr" && $("hr").value) run.hr = +$("hr").value;
+  else if (S.intLast === "rpe" && $("rpe").value) { const r = +$("rpe").value; run.hr = cal.slow.hr + (r - 3) / (raceRPE(Tpre) - 3) * (pre.raceHR(Tpre) - cal.slow.hr); }
+  else if (S.intLast === "pct" && $("pct").value) {
+    // % der Rennpace bei gleicher Strecke: Zielzeit = Rennzeit / pct
+    const racePlan = E.plan({ ...base, run: { ...run, type: "race" } });
+    run.targetS = racePlan.totalS / ((+$("pct").value) / 100);
+  }
+  const R = E.plan({ ...base, run });
+  LAST = R;
+  // Felder rückwärts füllen
+  const racePlan = E.plan({ ...base, run: { type: "race", techF: run.techF } });
+  const pct = racePlan.totalS / R.totalS * 100;
+  const vals = { hr: Math.round(R.hr), rpe: Math.round(R.rpe * 2) / 2, pct: Math.round(pct) };
+  ["hr", "rpe", "pct"].forEach(id => {
+    $(id).placeholder = String(vals[id]).replace(".", ",");
+    if (id !== S.intLast) $(id).value = (S.intLast || tgt) ? vals[id] : "";
+  });
+  $("runTag").textContent = `${fmtT(R.totalS)} h · ${Math.round(R.hr)} bpm`;
+  $("envTag").textContent = `${nf(+$("T").value, 0)} °C · ${E.SURF[$("surface").value].label}${$("snowLine").value ? " · Schnee ab " + $("snowLine").value + " m" : ""}`;
+  $("fuelTag").textContent = `${S.products.filter(p => p.on).length} Produkte`;
+  renderKPIs(R, A); renderProfile(R); renderMsgs(R, A, tgt, racePlan); renderPlan(R); renderSplits(R); renderSections(R); renderPack(R); renderBal(R, A);
+  save();
+}
+function zoneOf(h) {
+  const z = [131, 163, 179, 195];
+  return h <= z[0] ? "Z1" : h <= z[1] ? "Z2" : h <= z[2] ? "Z3" : h <= z[3] ? "Z4" : "Z5";
+}
+function renderKPIs(R, A) {
+  const startMin = toMin($("start").value);
+  const end = fmtClock(startMin + R.totalS / 60);
+  const avgP = R.totalS / (R.st.dist / 1000);
+  $("kpis").innerHTML = `
+    <div class="kpi"><div class="l">Laufzeit</div><div class="v">${fmtT(R.totalS)}</div><div class="s">Ziel ca. ${end} Uhr</div></div>
+    <div class="kpi"><div class="l">Ø Pace / flach</div><div class="v">${fmtP(avgP)}</div><div class="s">flach-äquiv. ${fmtP(R.flatPace)} /km</div></div>
+    <div class="kpi h"><div class="l">Ziel-HF</div><div class="v">${Math.round(R.hr)}</div><div class="s">${zoneOf(R.hr)} · RPE ${nf(Math.round(R.rpe * 2) / 2, 1)} · ${Math.round(R.hr / A.hrMax * 100)} % HFmax</div></div>
+    <div class="kpi c"><div class="l">Carbs</div><div class="v">${Math.round(R.carbH)} g/h</div><div class="s">gesamt ${Math.round(R.carbsTotal)} g</div></div>
+    <div class="kpi w"><div class="l">Trinken</div><div class="v">${nf(R.fluidH, 2)} l/h</div><div class="s">Schweiß ~${nf(R.sweat, 1)} l/h</div></div>
+    <div class="kpi n"><div class="l">Natrium</div><div class="v">${Math.round(R.naH / 10) * 10}</div><div class="s">mg/h · ${A.salty ? "salzig" : "normal"}</div></div>`;
+}
+const toMin = v => { const m = String(v || "07:00").match(/(\d+):(\d+)/); return m ? +m[1] * 60 + +m[2] : 420; };
+const fmtClock = m => { m = Math.round(m) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+function kindOf(it) { return it.kind || "gel"; }
+function renderProfile(R) {
+  const svg = $("prof"); const W = 900, H = 240, L = 44, Rr = 10, Tp = 14, B = 26;
+  const segs = R.segT; const D = R.st.dist / 1000;
+  const zmin = Math.floor((R.st.zmin - 30) / 100) * 100, zmax = Math.ceil((R.st.zmax + 30) / 100) * 100;
+  const x = km => L + (W - L - Rr) * km / D, y = z => Tp + (H - Tp - B) * (1 - (z - zmin) / (zmax - zmin));
+  let d = `M${x(0)},${y(segs[0].z0)}`; segs.forEach(s => d += `L${x((s.d0 + s.d) / 1000).toFixed(1)},${y(s.z1).toFixed(1)}`);
+  const area = d + `L${x(D)},${H - B}L${x(0)},${H - B}Z`;
+  let g = "";
+  const zStep = (zmax - zmin) > 1200 ? 400 : (zmax - zmin) > 600 ? 200 : 100;
+  for (let z = zmin; z <= zmax; z += zStep) g += `<line x1="${L}" x2="${W - Rr}" y1="${y(z)}" y2="${y(z)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(z) + 4}" text-anchor="end">${z}</text>`;
+  const kStep = D > 60 ? 10 : D > 25 ? 5 : D > 10 ? 2 : 1;
+  for (let k = 0; k <= D + 0.01; k += kStep) g += `<text x="${x(k)}" y="${H - 8}" text-anchor="middle">${k}</text>`;
+  g += `<text x="${W - Rr}" y="${H - 8}" text-anchor="end">km</text>`;
+  const sl = $("snowLine").value;
+  let snow = "";
+  if (sl !== "" && +sl < zmax) snow = `<line x1="${L}" x2="${W - Rr}" y1="${y(+sl)}" y2="${y(+sl)}" stroke="var(--snow)" stroke-dasharray="5 4" stroke-width="1.5"/><text x="${W - Rr - 4}" y="${y(+sl) - 4}" text-anchor="end" style="fill:var(--snow)">Schneegrenze ${sl} m</text>`;
+  let marks = "";
+  const colors = { gel: "var(--carb)", bar: "#8a5a2b", chew: "#d26a8f", can: "var(--fluid)" };
+  R.events.forEach(e => {
+    const cx = x(e.km), cy = y(e.z);
+    if (e.type === "vp") { marks += `<g><title>${esc(e.name)} · km ${nf(e.km, 1)}</title><line x1="${cx}" x2="${cx}" y1="${cy}" y2="${cy - 26}" stroke="var(--accent)" stroke-width="2"/><path d="M${cx},${cy - 26}h14l-4,5l4,5h-14z" fill="var(--accent)"/></g>`; return; }
+    if (!e.items.length && !e.sip) return;
+    const c = e.items.length ? colors[kindOf(e.items[0])] : "var(--fluid)";
+    marks += `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${c}" stroke="var(--panel)" stroke-width="1.5"><title>${fmtT(e.t)} · km ${nf(e.km, 1)} · ${esc(e.items.map(i => i.name).join(", ") || "trinken")}</title></circle>`;
+  });
+  svg.innerHTML = `${g}<path d="${area}" fill="var(--terrain)" opacity=".55"/><path d="${d}" fill="none" stroke="var(--terrain-line)" stroke-width="1.6"/>${snow}${marks}`;
+  $("profSub").textContent = `${S.course.name} · ${nf(D, 1)} km · ↑ ${nf(R.st.up)} m · ↓ ${nf(R.st.down)} m`;
+}
+function renderMsgs(R, A, tgt, racePlan) {
+  const out = [];
+  if (tgt && R.totalS < racePlan.totalS * 0.97) out.push(`<div class="warnbox">Die Zielzeit ${fmtT(tgt)} ist schneller als deine Modell-Rennzeit (${fmtT(racePlan.totalS)}). Dafür bräuchtest du rund ${Math.round(R.hr)} bpm über die ganze Dauer. Das liegt über dem, was du in deinen Rennen gehalten hast.</div>`);
+  if (R.useFlask) {
+    R.sections.forEach(s => { const cap = (+$("flasks").value) * (+$("flaskL").value); const need = R.fluidH * (s.tB - s.tA) / 3600; if (need > cap + 0.05) out.push(`<div class="warnbox">${esc(s.from)} → ${esc(s.to)}: ${nf(need, 2)} l Bedarf, du trägst ${nf(cap, 2)} l. Mehr Flasks mitnehmen oder unterwegs nachfüllen.</div>`); });
+  }
+  if (R.naGap > 150 && R.totalS > 2 * 3600) out.push(`<div class="warnbox">Natrium: Die Produkte liefern ~${Math.round(R.naTotal)} mg, dein Ziel liegt bei ~${Math.round(R.naH * R.totalS / 3600)} mg. Rund ${Math.round(R.naGap / 100) * 100} mg fehlen, etwa ${Math.ceil(R.naGap / 215)} Salztabletten à 215 mg Na oder Elektrolyt in die zweite Flask.</div>`);
+  if (R.caf > 0) out.push(`<div class="okbox">Koffein gesamt ${Math.round(R.caf)} mg (${nf(R.caf / A.mass, 1)} mg/kg, Grenze ${nf(A.cafPerKg, 1)} mg/kg). Koffeinprodukte kommen erst in der zweiten Hälfte.</div>`);
+  if (S.type !== "race" && R.carbH >= A.carbTol - 1 && !A.gutTraining) out.push(`<div class="okbox">Du liegst an deiner Toleranz von ${A.carbTol} g/h. Für einen lockeren Lauf reicht auch weniger, das Modell geht hier nach der Dauer.</div>`);
+  $("msgs").innerHTML = out.join("");
+}
+function chips(e) {
+  const c = e.items.map(i => `<span class="chip ${kindOf(i)}"><i></i>${esc(i.name)}</span>`);
+  if (e.sip > 0.01) c.push(`<span class="chip drink"><i></i>${Math.round(e.sip * 1000 / 10) * 10} ml Flask</span>`);
+  return c.join("") || `<span class="hint">nur Wasser</span>`;
+}
+function renderPlan(R) {
+  const startMin = toMin($("start").value);
+  let prevT = 0, prevKm = 0;
+  let rows = `<tr><td class="num">${fmtClock(startMin)}</td><td class="num">0:00</td><td class="num">0,0</td><td class="num">${Math.round(R.segT[0].z0)}</td><td class="num">–</td><td class="num">–</td><td>Start${R.useFlask ? ` · ${$("flasks").value} × ${$("flaskL").value} l, je ${$("drinkServ").value} Portionen 2:1 Drink` : ""}</td></tr>`;
+  R.events.forEach(e => {
+    const dk = e.km - prevKm, dt = e.t - prevT;
+    const pace = dk > 0.05 ? dt / dk : NaN;
+    const hrLo = Math.round(R.hr - (e.type === "fuel" && e.g < -0.05 ? 12 : 5)), hrHi = Math.round(R.hr + (e.type === "fuel" && e.walk ? 3 : 5));
+    let act;
+    if (e.type === "vp") act = `<span class="chip vp">${esc(e.name)}</span> ${R.useFlask ? "Flasks auffüllen, Gels für den nächsten Abschnitt nehmen" : "auffüllen"}`;
+    else act = chips(e) + (e.walk ? ` <span class="hint">· Gehpassage</span>` : "");
+    rows += `<tr class="${e.type}"><td class="num">${fmtClock(startMin + e.t / 60)}</td><td class="num">${fmtT(e.t)}</td><td class="num">${nf(e.km, 1)}</td><td class="num">${Math.round(e.z)}</td><td class="num">${fmtP(pace)}</td><td class="num">${hrLo}–${hrHi}</td><td>${act}</td></tr>`;
+    prevT = e.t; prevKm = e.km;
+  });
+  const dk = R.st.dist / 1000 - prevKm;
+  rows += `<tr><td class="num">${fmtClock(startMin + R.totalS / 60)}</td><td class="num">${fmtT(R.totalS)}</td><td class="num">${nf(R.st.dist / 1000, 1)}</td><td class="num">${Math.round(R.segT[R.segT.length - 1].z1)}</td><td class="num">${fmtP((R.totalS - prevT) / dk)}</td><td class="num">–</td><td>Ziel</td></tr>`;
+  $("tabPlan").innerHTML = `<table><thead><tr><th class="num">Uhrzeit</th><th class="num">Laufzeit</th><th class="num">km</th><th class="num">Höhe</th><th class="num">Pace</th><th class="num">HF</th><th>Was du nimmst</th></tr></thead><tbody>${rows}</tbody></table>
+  <p class="note">Pace = Durchschnitt seit der vorigen Zeile. Die HF-Spanne ist ein Deckel: bergauf eher gehen als drüber, bergab darf sie tiefer liegen.</p>`;
+}
+function renderSplits(R) {
+  const n = Math.ceil(R.st.dist / 1000 - 0.05);
+  let rows = "";
+  for (let k = 0; k < n; k++) {
+    const ss = R.segT.filter(s => s.d0 >= k * 1000 - 1 && s.d0 < (k + 1) * 1000 - 1);
+    if (!ss.length) continue;
+    const d = ss.reduce((x, s) => x + s.d, 0), t = ss.reduce((x, s) => x + s.dt, 0);
+    const up = ss.reduce((x, s) => x + Math.max(0, s.dz), 0), dn = ss.reduce((x, s) => x + Math.max(0, -s.dz), 0);
+    const g = (ss[ss.length - 1].z1 - ss[0].z0) / d * 100;
+    const gap = t / (d / 1000) / (ss.reduce((x, s) => x + s.d * E.gradeFactor(s.g, modelP()) * s.f, 0) / d);
+    const walk = ss.some(s => s.walk);
+    rows += `<tr><td class="num">${k + 1}</td><td class="num">${fmtP(t / (d / 1000))}</td><td class="num">${fmtP(gap)}</td><td class="num">+${Math.round(up)} / −${Math.round(dn)}</td><td class="num">${nf(g, 0)} %</td><td class="num">${fmtT(ss[ss.length - 1].t1)}</td><td>${walk ? "gehen" : ""}${ss.some(s => s.surf !== "dry") ? (walk ? ", " : "") + E.SURF[ss[0].surf].label : ""}</td></tr>`;
+  }
+  $("tabSplits").innerHTML = `<table><thead><tr><th class="num">km</th><th class="num">Pace</th><th class="num">GAP</th><th class="num">Hm</th><th class="num">Ø Steig.</th><th class="num">Laufzeit</th><th>Hinweis</th></tr></thead><tbody>${rows}</tbody></table><p class="note">GAP = flach-äquivalente Pace inklusive Untergrund und Wetter, sollte über den Lauf fast konstant sein.</p>`;
+}
+function renderSections(R) {
+  let rows = "";
+  R.sections.forEach(s => {
+    const it = Object.entries(s.items).map(([k, v]) => `${v} × ${esc(k)}`).join("<br>") || "–";
+    rows += `<tr><td>${esc(s.from)} → ${esc(s.to)}</td><td class="num">${nf(s.dist, 1)}</td><td class="num">${Math.round(s.up)}</td><td class="num">${fmtT(s.tB - s.tA)}</td><td class="num">${nf(R.fluidH * (s.tB - s.tA) / 3600, 2)} l</td><td>${it}</td></tr>`;
+  });
+  $("tabSections").innerHTML = `<table><thead><tr><th>Abschnitt</th><th class="num">km</th><th class="num">Hm ↑</th><th class="num">Zeit</th><th class="num">Trinken</th><th>Einstecken</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderPack(R) {
+  const li = Object.entries(R.pack).map(([k, v]) => `<li><span>${esc(k)}</span><b>${v} ×</b></li>`);
+  if (R.useFlask) li.push(`<li><span>2:1 Drink, Portionen (${R.drinkFlasks} Flask-Füllungen à ${$("drinkServ").value})</span><b>${R.drinkFlasks * (+$("drinkServ").value)} ×</b></li>`);
+  const res = Math.max(1, Math.round(R.totalS / 3600 / 2));
+  li.push(`<li><span>Reserve-Gel (1 je 2 h)</span><b>${res} ×</b></li>`);
+  if (R.naGap > 150 && R.totalS > 2 * 3600) li.push(`<li><span>Salztabletten (à ~215 mg Na)</span><b>${Math.ceil(R.naGap / 215)} ×</b></li>`);
+  li.push(`<li><span>Wasser gesamt</span><b>${nf(R.fluidH * R.totalS / 3600, 1)} l</b></li>`);
+  $("pack").innerHTML = `<ul class="plain">${li.join("")}</ul><p class="note">${S.vps.length && R.useFlask ? "Bei VPs musst du nur bis zur nächsten Station tragen, siehe Reiter Abschnitte." : ""}</p>`;
+}
+function renderBal(R, A) {
+  const H = R.totalS / 3600;
+  $("bal").innerHTML = `<ul class="plain">
+    <li><span>Carb-Ziel (${esc(R.carbBand)})</span><b>${Math.round(R.carbH)} g/h</b></li>
+    <li><span>davon aus der Flask</span><b>${Math.round(R.drinkCarbH)} g/h</b></li>
+    <li><span>Carbs geplant gesamt</span><b>${Math.round(R.carbsTotal)} g</b></li>
+    <li><span>Energieverbrauch Laufen <span class="badge est">Schätzung</span></span><b>${nf(Math.round(R.kcal / 50) * 50)} kcal</b></li>
+    <li><span>davon über Carbs gedeckt</span><b>${Math.round(R.carbsTotal * 4 / R.kcal * 100)} %</b></li>
+    <li><span>Schweißverlust <span class="badge est">${A.sweatRate ? "gemessen" : "Schätzung"}</span></span><b>${nf(R.sweat * H, 1)} l</b></li>
+    <li><span>Trinkmenge geplant</span><b>${nf(R.fluidH * H, 1)} l</b></li>
+    <li><span>Gewichtsverlust bei Plan</span><b>${nf(Math.max(0, (R.sweat - R.fluidH) * H) / A.mass * 100, 1)} %</b></li>
+    <li><span>Natrium Ziel / aus Produkten</span><b>${Math.round(R.naH * H)} / ${Math.round(R.naTotal)} mg</b></li>
+    <li><span>Ø Temperatur unterwegs</span><b>${nf(R.Tmean, 1)} °C</b></li></ul>
+    <p class="note">Über ${Math.round(R.carbsTotal * 4 / R.kcal * 100)} % Deckung musst du nicht kommen. Der Rest kommt aus Glykogen und Fett.</p>`;
+}
+// Tabs
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+  $("tabPlan").hidden = b.dataset.tab !== "plan"; $("tabSplits").hidden = b.dataset.tab !== "splits"; $("tabSections").hidden = b.dataset.tab !== "sections";
+});
+// Alle übrigen Felder
+FIELDS.filter(id => !["hr", "rpe", "pct", "target", "manZ0"].includes(id)).forEach(id => $(id).addEventListener("change", render));
+["T", "wind", "snowLine", "interval", "drinkShare", "mass", "carbTol"].forEach(id => $(id).addEventListener("input", () => { clearTimeout(window._rt); window._rt = setTimeout(render, 250); }));
+
+const had = load();
+document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.type === S.type)));
+if (!had) loadSample(); else render();
+})();
+</script>
+</body>
+</html>
