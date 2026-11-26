@@ -57,6 +57,9 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:13px}
 .btns{display:flex;flex-wrap:wrap;gap:6px}
 .drop{border:1.5px dashed var(--line);border-radius:9px;padding:12px;text-align:center;color:var(--muted);font-size:13px}
 .drop.over{border-color:var(--accent);color:var(--ink)}
+.kmt{display:flex;flex-direction:column;gap:6px}
+.kmt-row{display:flex;gap:6px;align-items:center}
+.kmt-row input,.kmt-row select{flex:1;font:500 14px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 8px;min-width:0}
 .tbl-wrap{overflow-x:auto;max-width:100%}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -122,6 +125,12 @@ ul.plain li b{font-family:var(--f-mono);font-weight:500}
     <summary>Strecke <span class="tag" id="courseTag"></span></summary>
     <div class="body">
       <div class="drop" id="drop">GPX-Datei hierher ziehen oder <label style="color:var(--accent);cursor:pointer;text-decoration:underline">auswählen<input type="file" id="gpx" accept=".gpx,application/gpx+xml" hidden></label><br><span class="hint">Wegpunkte in der GPX werden als Verpflegungsstellen vorgeschlagen.</span></div>
+      <div class="kmt">
+        <b style="font-size:13px">Komoot-Tour übernehmen</b>
+        <div class="kmt-row"><input type="url" id="kmtUrl" placeholder="Komoot-Link einfügen, z. B. komoot.com/de-de/tour/123…?share_token=…" aria-label="Komoot-Tourlink"><button class="btn small primary" type="button" id="kmtLoad">Laden</button></div>
+        <div class="kmt-row" id="kmtListRow" hidden><select id="kmtList" aria-label="Gespeicherte Komoot-Touren"></select><button class="btn small" type="button" id="kmtDel" aria-label="Tour aus der Liste entfernen">Entfernen</button></div>
+        <p class="hint" id="kmtHint">Geplante Tour in Komoot öffnen, auf „Teilen“ tippen und den Link kopieren. Der Link enthält einen Freigabeschlüssel, deshalb klappt das auch bei privaten Touren ohne Komoot-Login. Geladene Touren landen in deiner Auswahlliste.</p>
+      </div>
       <div class="btns">
         <button class="btn" type="button" id="loadSample">Beispiel laden: Mittenwald Trail</button>
         <button class="btn" type="button" id="toManual">Manuell eingeben</button>
@@ -722,6 +731,85 @@ drop.addEventListener("drop", async e => {
   const f = e.dataTransfer.files[0]; if (!f) return;
   try { const c = parseGPX(await readFile(f)); setCourse(c, c.vps.length ? c.vps : S.vps); } catch (err) { $("vpHint").textContent = err.message; }
 });
+// ---------- Komoot ----------
+// Komoot hat keine offene API für Privatnutzer. Die Tour-Endpunkte der Web-App liefern aber
+// öffentliche Touren und per Link geteilte Touren (share_token) ohne Login und mit CORS.
+const KMT_SPORT = { hike: "Wandern", jogging: "Laufen", mountaineering: "Bergtour", mtb: "Mountainbike", mtb_easy: "Gravel/MTB", racebike: "Rennrad", touringbicycle: "Radtour", e_mtb: "E-MTB", e_touringbicycle: "E-Bike" };
+function parseKomootUrl(s) {
+  s = (s || "").trim(); if (!s) return null;
+  const m = s.match(/tours?\/(\d{3,})/) || s.match(/^(\d{3,})$/);
+  if (!m) return null;
+  const t = s.match(/share_token=([A-Za-z0-9_-]+)/);
+  return { id: m[1], token: t ? t[1] : "" };
+}
+function komootToCourse(j) {
+  const items = j?._embedded?.coordinates?.items || [];
+  if (items.length < 5) throw new Error("Die Komoot-Tour enthält zu wenige Punkte.");
+  const ll = items.map(p => [+p.lat, +p.lng]);
+  const alt = items.map(p => (p.alt == null || !isFinite(+p.alt)) ? NaN : +p.alt);
+  if (alt.every(a => !isFinite(a))) throw new Error("Die Komoot-Tour enthält keine Höhendaten.");
+  for (let k = 0; k < alt.length; k++) if (!isFinite(alt[k])) alt[k] = alt[k - 1] ?? alt.find(isFinite);
+  let dist = [0];
+  for (let k = 1; k < ll.length; k++) dist.push(dist[k - 1] + haversine(ll[k - 1], ll[k]));
+  // Auf Komoots Gesamtdistanz skalieren, falls die nur leicht abweicht
+  const tot = dist[dist.length - 1], kd = +j.distance;
+  if (kd > 0 && tot > 0 && kd / tot > 0.9 && kd / tot < 1.1) dist = dist.map(d => d * kd / tot);
+  return {
+    name: j.name || "Komoot-Tour", dist, alt, lat: ll[0][0], lon: ll[0][1], vps: [], durS: null, src: "komoot",
+    kmt: { km: (kd || tot) / 1000, up: +j.elevation_up || 0, down: +j.elevation_down || 0, dur: +j.duration || 0, sport: j.sport || "", planned: j.type === "tour_planned" }
+  };
+}
+async function fetchKomoot(id, token) {
+  const q = `${id}?_embedded=coordinates${token ? "&share_token=" + encodeURIComponent(token) : ""}`;
+  let r = null;
+  for (const base of ["https://www.komoot.com/api/v007/tours/", "https://api.komoot.de/v007/tours/"]) {
+    try { r = await fetch(base + q); break; } catch (e) { r = null; }
+  }
+  if (!r) throw new Error("Komoot ist gerade nicht erreichbar oder blockiert den Abruf. Ausweg: In Komoot die Tour als GPX herunterladen und oben hineinziehen.");
+  if (r.status === 401 || r.status === 403) throw new Error("Die Tour ist privat. Nimm den Link über „Teilen“ in Komoot (er enthält share_token) oder stell die Tour auf öffentlich.");
+  if (r.status === 404) throw new Error("Komoot kennt diese Tour nicht. Stimmt der Link?");
+  if (!r.ok) throw new Error(`Komoot antwortet mit Fehler ${r.status}. Ausweg: GPX aus Komoot herunterladen und oben hineinziehen.`);
+  return komootToCourse(await r.json());
+}
+function hm(sec) { const m = Math.round(sec / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`; }
+function renderKmtList(sel) {
+  const list = S.komoot || [];
+  $("kmtListRow").hidden = !list.length;
+  const el = $("kmtList"); el.innerHTML = "";
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = `Meine Komoot-Touren (${list.length})`; el.appendChild(o0);
+  list.forEach(t => { const o = document.createElement("option"); o.value = t.id; o.textContent = `${t.name} · ${nf(t.km, 1)} km · ${nf(t.up)} Hm`; el.appendChild(o); });
+  el.value = sel || "";
+}
+async function loadKomoot(id, token) {
+  const hint = $("kmtHint"), btn = $("kmtLoad");
+  hint.textContent = "Lade Tour von Komoot …"; btn.disabled = true;
+  try {
+    const c = await fetchKomoot(id, token);
+    setCourse(c, S.vps);
+    const k = c.kmt;
+    S.komoot = (S.komoot || []).filter(t => t.id !== id);
+    S.komoot.unshift({ id, token, name: c.name, km: k.km, up: k.up, sport: k.sport });
+    S.komoot.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    renderKmtList(id); save();
+    hint.textContent = `„${c.name}“ übernommen: ${nf(k.km, 1)} km, ↑ ${nf(k.up)} m, ↓ ${nf(k.down)} m.` +
+      (k.dur ? ` Komoot schätzt ${hm(k.dur)}${k.sport ? " für " + (KMT_SPORT[k.sport] || k.sport) : ""}; der Rechner nutzt sein eigenes, auf deine Läufe kalibriertes Modell.` : "");
+    $("vpHint").textContent = S.vps.length ? "Komoot liefert keine Verpflegungsstellen. Die bisherigen VPs sind stehen geblieben, bitte prüfen." : "Komoot liefert keine Verpflegungsstellen. Trag sie bei Bedarf von Hand ein.";
+    return true;
+  } catch (err) { hint.textContent = err.message; return false; }
+  finally { btn.disabled = false; }
+}
+$("kmtLoad").onclick = async () => {
+  const p = parseKomootUrl($("kmtUrl").value);
+  if (!p) { $("kmtHint").textContent = "Das sieht nicht nach einem Komoot-Tourlink aus. Erwartet wird etwas wie komoot.com/de-de/tour/123456789?share_token=…"; return; }
+  if (await loadKomoot(p.id, p.token)) $("kmtUrl").value = "";
+};
+$("kmtUrl").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("kmtLoad").click(); } });
+$("kmtList").onchange = e => { const t = (S.komoot || []).find(x => x.id === e.target.value); if (t) loadKomoot(t.id, t.token); };
+$("kmtDel").onclick = () => {
+  const id = $("kmtList").value; if (!id) { $("kmtHint").textContent = "Erst eine Tour in der Liste auswählen."; return; }
+  S.komoot = (S.komoot || []).filter(t => t.id !== id); renderKmtList(); save();
+};
+
 function loadSample() {
   const r = REF_RAW[0];
   setCourse({ name: "Mittenwald Trail (Profil aus Strava)", dist: r.alt.map((_, k) => r.dist * k / (r.alt.length - 1)), alt: r.alt, lat: 47.4425, lon: 11.2606, src: "sample" }, JSON.parse(JSON.stringify(SAMPLE_VPS)));
@@ -1080,6 +1168,7 @@ FIELDS.filter(id => !["hr", "rpe", "pct", "target", "manZ0"].includes(id)).forEa
 const had = load();
 document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.type === S.type)));
 if (!had) loadSample(); else render();
+renderKmtList();
 })();
 </script>
 </body>
